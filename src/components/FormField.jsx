@@ -28,7 +28,7 @@ export default function FormField({
   max,
   isUrdu = false
 }) {
-  const isInvalid = Boolean(touched && error);
+  const isInvalid = touched !== undefined ? Boolean(touched && error) : Boolean(error);
 
   return (
     <div className={`space-y-1 text-left ${className}`}>
@@ -37,11 +37,11 @@ export default function FormField({
           <label 
             htmlFor={name}
             className={`block text-[11px] font-extrabold uppercase tracking-wider ${
-              isInvalid ? 'text-rose-600' : 'text-slate-700'
+              isInvalid ? 'text-rose-400' : 'text-slate-200'
             } ${isUrdu ? 'font-urdu text-xs' : ''}`}
           >
             {label}
-            {required && <span className="text-rose-500 ml-1 font-black">*</span>}
+            {required && <span className="text-rose-400 ml-1 font-black">*</span>}
           </label>
         </div>
       )}
@@ -49,7 +49,7 @@ export default function FormField({
       <div className="relative rounded-xl transition-all duration-200">
         {Icon && (
           <div className={`absolute inset-y-0 ${isUrdu && dir === 'rtl' ? 'right-0 pr-3' : 'left-0 pl-3'} flex items-center pointer-events-none ${
-            isInvalid ? 'text-rose-500' : 'text-slate-400'
+            isInvalid ? 'text-rose-400' : 'text-slate-400'
           }`}>
             <Icon size={16} />
           </div>
@@ -69,15 +69,16 @@ export default function FormField({
           min={min}
           max={max}
           dir={dir}
+          aria-invalid={isInvalid}
           className={`w-full rounded-xl text-xs sm:text-sm font-medium transition-all outline-none py-2 px-3 ${
             Icon ? (isUrdu && dir === 'rtl' ? 'pr-9 pl-3' : 'pl-9 pr-3') : ''
           } ${
             rightElement ? 'pr-10' : ''
           } ${
             isInvalid
-              ? 'bg-rose-50/70 border-2 border-rose-500 text-rose-950 placeholder-rose-300 focus:ring-2 focus:ring-rose-300/40 shadow-xs'
-              : 'bg-white/90 border border-slate-300 text-slate-900 placeholder-slate-400 hover:border-slate-400 focus:bg-white focus:border-cyan-500 focus:ring-2 focus:ring-cyan-400/20 shadow-2xs'
-          } ${disabled ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''} ${inputClassName}`}
+              ? 'bg-rose-500/15 border-2 border-rose-500/80 text-rose-100 placeholder-rose-300/70 focus:ring-2 focus:ring-rose-500/30 shadow-xs'
+              : 'bg-[#0F1930]/80 border border-white/15 text-white placeholder-slate-400 hover:border-white/30 focus:bg-[#0F1930] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/25 shadow-2xs'
+          } ${disabled ? 'opacity-60 cursor-not-allowed bg-white/[0.04]' : ''} ${inputClassName}`}
         />
 
         {rightElement && (
@@ -88,8 +89,8 @@ export default function FormField({
       </div>
 
       {isInvalid && (
-        <div className="flex items-center gap-1.5 text-rose-600 text-[11px] font-bold animate-fadeIn pl-0.5">
-          <AlertCircle size={13} className="shrink-0 text-rose-500" />
+        <div className="flex items-center gap-1.5 text-rose-400 text-[11px] font-bold animate-fadeIn pl-0.5">
+          <AlertCircle size={13} className="shrink-0 text-rose-400" />
           <span className={isUrdu ? 'font-urdu' : ''}>{error}</span>
         </div>
       )}

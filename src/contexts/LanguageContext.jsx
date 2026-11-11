@@ -52,7 +52,7 @@ export const translations = {
     businessCardTitle: 'Business Shipper Center',
     businessCardRole: 'Shipper',
     businessCardDesc: 'Post cargo requests with multi-recipient details, track transit coordinates on interactive maps, and download official Bilties.',
-    footerText: 'E-CARGO-BILTY PLATFORM • BSSE FYP',
+    footerText: 'E-CARGO-BILTY PLATFORM',
 
     // Login Page
     loginWelcome: 'Welcome Back',
@@ -135,7 +135,7 @@ export const translations = {
     businessCardTitle: 'تاجر و کاروباری مرکز',
     businessCardRole: 'تاجر / کسٹمر',
     businessCardDesc: 'اپنا کارگو پوسٹ کریں، نقشے پر لائیو ٹریک کریں اور باضابطہ قانونی بلٹی ڈاؤن لوڈ کریں۔',
-    footerText: 'ای کارگو بلٹی پلیٹ فارم • فائنل ایئر پروجیکٹ',
+    footerText: 'ای کارگو بلٹی پلیٹ فارم',
 
     // Login Page
     loginWelcome: 'خوش آمدید',

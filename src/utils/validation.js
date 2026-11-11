@@ -14,9 +14,9 @@ export const REGEX = {
   cnic: /^\d{5}-\d{7}-\d{1}$/,
   cnicRaw: /^\d{13}$/,
 
-  // Pakistani Mobile Phone: 03XX-XXXXXXX or 03XXXXXXXXX or +923XXXXXXXXX
-  phone: /^((\+92)|(0092))?0?3[0-4][0-9]-?\d{7}$/,
-  phoneFormatted: /^03[0-4][0-9]-\d{7}$/,
+  // Pakistani Mobile Phone: 03XX-XXXXXXX or 03XXXXXXXXX or +923XXXXXXXXX (supports 0300-0359 including SCOM)
+  phone: /^((\+92)|(0092))?0?3[0-5][0-9]-?\d{7}$/,
+  phoneFormatted: /^03[0-5][0-9]-\d{7}$/,
 
   // Pakistani NTN: 7 digits - 1 digit or alphanumeric registration (7 to 15 chars)
   ntn: /^\d{7}-\d{1}$/,
@@ -52,6 +52,10 @@ export function formatPhone(value = '') {
   let cleaned = value.replace(/[^\d+]/g, '');
   if (cleaned.startsWith('+92')) {
     cleaned = '0' + cleaned.slice(3);
+  } else if (cleaned.startsWith('0092')) {
+    cleaned = '0' + cleaned.slice(4);
+  } else if (cleaned.startsWith('923') && cleaned.length >= 12) {
+    cleaned = '0' + cleaned.slice(2);
   }
   const digits = cleaned.replace(/\D/g, '').slice(0, 11);
   if (digits.length <= 4) return digits;

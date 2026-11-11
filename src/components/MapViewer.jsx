@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Navigation, Radio, Truck, MapPin, Phone, User, CheckCircle, Layers, Clock, ShieldCheck } from 'lucide-react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ChamakRibbon } from './TruckArt';
 import { useLanguage } from '../contexts/LanguageContext';
+
+function MapViewUpdater({ center }) {
+  const map = useMap();
+  useEffect(() => {
+    if (Array.isArray(center) && center.length === 2 && Number.isFinite(center[0]) && Number.isFinite(center[1])) {
+      map.setView(center, map.getZoom(), { animate: true });
+    }
+  }, [center?.[0], center?.[1], map]);
+  return null;
+}
 
 // 100% Free, Public Tile Providers (Zero API Key Required)
 export const TILE_PROVIDERS = {
@@ -66,10 +76,10 @@ export const getCoordinatesForLocation = (loc, fallback = [31.5204, 74.3587]) =>
 // Create a custom Pakistani Truck-Art GPS marker with pulsing ring, crown accent and plate label
 export const createCustomIcon = (color, label = '') => {
   const accentColor = 
-    color === 'neon-blue' || color === 'teal' || color === 'cyan' ? '#00F5D4' : 
-    color === 'rose' || color === 'red' ? '#F72585' : 
+    color === 'neon-blue' || color === 'teal' || color === 'cyan' ? '#F89020' : 
+    color === 'rose' || color === 'red' ? '#E11D48' : 
     color === 'emerald' || color === 'green' ? '#10B981' : 
-    '#FFB703';
+    '#F89020';
   
   const iconMarkup = renderToStaticMarkup(
     <div className="relative flex flex-col items-center justify-center -mt-4 -ml-4 pointer-events-auto">
@@ -80,15 +90,15 @@ export const createCustomIcon = (color, label = '') => {
       />
       {/* Decorative Ornate Border */}
       <div 
-        className="relative flex items-center justify-center w-8 h-8 rounded-full bg-[#070A11] border-2 shadow-[0_0_15px_rgba(251,183,3,0.6)]"
+        className="relative flex items-center justify-center w-8 h-8 rounded-full bg-slate-900 border-2 shadow-md"
         style={{ borderColor: accentColor }}
       >
         <Navigation size={14} className="rotate-45" style={{ color: accentColor }} />
-        {/* Crown/Taj jewel pin on top */}
-        <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-[#D90429] border border-white shadow-[0_0_6px_#D90429]"></div>
+        {/* Status center dot on top */}
+        <div className="absolute -top-1.5 w-2 h-2 rounded-full bg-[#F89020] border border-white shadow-xs"></div>
       </div>
       {label && (
-        <span className="mt-1 px-1.5 py-0.5 rounded bg-[#0B101D]/90 text-[9px] font-mono font-bold text-amber-300 border border-amber-500/40 whitespace-nowrap shadow-md">
+        <span className="mt-1 px-1.5 py-0.5 rounded bg-slate-900/95 text-[9px] font-mono font-bold text-orange-300 border border-orange-500/40 whitespace-nowrap shadow-md">
           {label}
         </span>
       )}
@@ -161,18 +171,15 @@ export default function MapViewer({
   if (!defaultIcon) return null;
 
   return (
-    <div className="w-full rounded-2xl overflow-hidden border-2 border-amber-300/80 shadow-2xl relative bg-[#070A11]" style={{ height }}>
-      {/* Top Chamak Patti border accent */}
-      <ChamakRibbon height="h-[4px]" className="absolute top-0 left-0 right-0 z-10" />
-
+    <div className="w-full rounded-2xl overflow-hidden border border-slate-700/80 shadow-2xl relative bg-[#070A11]" style={{ height }}>
       {/* Top Left: Map Style Selector (100% Free, Zero API Key Required) */}
-      <div className="absolute top-3 left-3 z-10 bg-[#0B101D]/90 border border-slate-700/80 rounded-lg p-0.5 flex items-center gap-1 backdrop-blur-md shadow-lg text-[10px] font-mono">
+      <div className="absolute top-3 left-3 z-[450] bg-slate-900/95 border border-slate-700/80 rounded-lg p-0.5 flex items-center gap-1 shadow-lg text-[10px] font-mono">
         <button
           type="button"
           onClick={() => setMapStyle('streets')}
           className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
             mapStyle === 'streets' 
-              ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' 
+              ? 'bg-[#F89020] text-slate-950 font-bold shadow-xs' 
               : 'text-slate-300 hover:text-white'
           }`}
           title="Esri World Street Map (No API Key)"
@@ -184,7 +191,7 @@ export default function MapViewer({
           onClick={() => setMapStyle('roads')}
           className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
             mapStyle === 'roads' 
-              ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' 
+              ? 'bg-[#F89020] text-slate-950 font-bold shadow-xs' 
               : 'text-slate-300 hover:text-white'
           }`}
           title="Humanitarian OpenStreetMap (No API Key)"
@@ -196,7 +203,7 @@ export default function MapViewer({
           onClick={() => setMapStyle('satellite')}
           className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
             mapStyle === 'satellite' 
-              ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' 
+              ? 'bg-[#F89020] text-slate-950 font-bold shadow-xs' 
               : 'text-slate-300 hover:text-white'
           }`}
           title="Satellite Imagery (No API Key)"
@@ -206,30 +213,30 @@ export default function MapViewer({
       </div>
 
       {/* Radar telemetry badge overlay */}
-      <div className="absolute top-3 right-3 z-10 bg-[#0B101D]/90 border border-amber-500/40 rounded-lg px-2.5 py-1.5 flex items-center gap-2 text-[10px] font-mono text-amber-300 backdrop-blur-md shadow-lg">
-        <Radio size={13} className="text-cyan-400 animate-pulse shrink-0" />
+      <div className="hidden sm:flex absolute top-3 right-14 z-[450] bg-slate-900/95 border border-orange-500/40 rounded-lg px-2.5 py-1.5 items-center gap-2 text-[10px] font-mono text-orange-300 shadow-lg">
+        <Radio size={13} className="text-[#F89020] animate-pulse shrink-0" />
         <span className="font-bold tracking-wider">
           {trucks ? `FLEET RADAR • ${trucks.length} TRUCKS` : (title || (route ? `ROUTE: ${route.origin} → ${route.destination}` : 'LIVE TELEMETRY ACTIVE'))}
         </span>
         <span className="text-gray-500">•</span>
-        <span className={isUrdu ? "font-urdu text-[11px] text-amber-400 font-bold" : "font-sans font-bold text-[10px] text-emerald-400 uppercase tracking-widest"}>
+        <span className={isUrdu ? "font-urdu text-[11px] text-orange-400 font-bold" : "font-sans font-bold text-[10px] text-emerald-400 uppercase tracking-widest"}>
           {isUrdu ? 'سفرِ خیر' : 'LIVE GPS'}
         </span>
       </div>
 
       {/* Driver & Telemetry Banner for Active Shipments */}
       {route && (route.driverName || route.eta) && (
-        <div className="absolute bottom-3 left-3 right-3 z-10 bg-[#0B101D]/95 border border-amber-500/50 rounded-xl p-2.5 backdrop-blur-md shadow-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="absolute bottom-3 left-3 right-3 z-[450] bg-slate-900/96 border border-orange-500/50 rounded-xl p-2.5 shadow-xl flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300">
+            <div className="w-8 h-8 rounded-lg bg-orange-500/20 border border-orange-400/40 flex items-center justify-center text-orange-300">
               <Truck size={16} />
             </div>
             <div>
-              <p className="font-mono font-bold text-amber-300 text-xs">
+              <p className="font-mono font-bold text-orange-300 text-xs">
                 {route.truckPlate || 'Assigned Carrier'}
               </p>
               <p className="text-[11px] text-slate-300 flex items-center gap-1.5">
-                <User size={11} className="text-cyan-400 shrink-0" />
+                <User size={11} className="text-orange-400 shrink-0" />
                 <span>{route.driverName || 'Driver'}</span>
                 {route.driverMobile && (
                   <>
@@ -244,8 +251,8 @@ export default function MapViewer({
 
           <div className="flex items-center gap-2 font-mono">
             {route.eta && (
-              <div className="bg-amber-950/80 border border-amber-500/40 rounded-lg px-2.5 py-1 text-amber-300 text-[11px] flex items-center gap-1">
-                <Clock size={12} className="text-amber-400 animate-spin" />
+              <div className="bg-slate-800/90 border border-orange-500/40 rounded-lg px-2.5 py-1 text-orange-300 text-[11px] flex items-center gap-1">
+                <Clock size={12} className="text-[#F89020]" />
                 <span>ETA: <strong>{route.eta}</strong></span>
               </div>
             )}
@@ -258,7 +265,7 @@ export default function MapViewer({
 
       {/* Bottom telemetry coordinates tag (when no route footer) */}
       {!route && (
-        <div className="absolute bottom-2 left-3 z-10 bg-[#0B101D]/80 border border-slate-700 rounded-md px-2 py-0.5 text-[9px] font-mono text-slate-400 backdrop-blur-sm pointer-events-none">
+        <div className="absolute bottom-2 left-3 z-[450] bg-slate-900/92 border border-slate-700 rounded-md px-2 py-0.5 text-[9px] font-mono text-slate-300 pointer-events-none">
           LAT: {center[0].toFixed(4)} | LNG: {center[1].toFixed(4)}
         </div>
       )}
@@ -266,10 +273,13 @@ export default function MapViewer({
       <MapContainer 
         center={center} 
         zoom={effectiveZoom} 
+        zoomControl={false}
         scrollWheelZoom={false} 
         style={{ height: '100%', width: '100%' }}
         className="z-0"
       >
+        <ZoomControl position="topright" />
+        <MapViewUpdater center={center} />
         {/* Dynamic Tile Layer with 100% Free Public Basemaps - Zero API Key Needed */}
         <TileLayer
           key={mapStyle}
@@ -284,7 +294,7 @@ export default function MapViewer({
             {/* Origin Marker */}
             <Marker position={originCoords} icon={originIcon || defaultIcon}>
               <Popup className="futuristic-popup">
-                <div className="p-2.5 bg-[#0B101D] text-white rounded-xl min-w-[170px] border border-emerald-500/40">
+                <div className="p-2.5 bg-slate-900 text-white rounded-xl min-w-[170px] border border-emerald-500/40">
                   <div className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
                     <MapPin size={12} className="text-emerald-400" /> Dispatch Origin
                   </div>
@@ -296,7 +306,7 @@ export default function MapViewer({
             {/* Destination Marker */}
             <Marker position={destCoords} icon={destIcon || defaultIcon}>
               <Popup className="futuristic-popup">
-                <div className="p-2.5 bg-[#0B101D] text-white rounded-xl min-w-[170px] border border-rose-500/40">
+                <div className="p-2.5 bg-slate-900 text-white rounded-xl min-w-[170px] border border-rose-500/40">
                   <div className="text-[10px] font-mono text-rose-400 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
                     <MapPin size={12} className="text-rose-400" /> Destination Hub
                   </div>
@@ -308,9 +318,9 @@ export default function MapViewer({
             {/* In-Transit Truck Marker */}
             <Marker position={activeTruckCoords} icon={createCustomIcon('neon-blue', route.truckPlate || 'TRUCK')}>
               <Popup className="futuristic-popup">
-                <div className="p-3 bg-[#0B101D] text-white rounded-xl min-w-[200px] border border-amber-500/40">
-                  <div className="text-[10px] font-mono text-amber-400 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <Truck size={12} className="text-cyan-400" /> Live In-Transit Telemetry
+                <div className="p-3 bg-slate-900 text-white rounded-xl min-w-[200px] border border-orange-500/40">
+                  <div className="text-[10px] font-mono text-orange-400 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Truck size={12} className="text-[#F89020]" /> Live In-Transit Telemetry
                   </div>
                   <p className="text-xs font-bold text-slate-200">{route.truckPlate || 'Carrier Unit'}</p>
                   <p className="text-[11px] text-slate-400 mt-1">Driver: {route.driverName || 'Verified'} ({route.driverMobile || 'GPS Linked'})</p>
@@ -322,7 +332,7 @@ export default function MapViewer({
             {/* Polyline Route Connecting Origin -> Truck -> Destination */}
             <Polyline 
               positions={polylinePositions} 
-              color="#F59E0B" 
+              color="#F89020" 
               weight={4} 
               dashArray="6, 8" 
               opacity={0.85} 
@@ -343,15 +353,15 @@ export default function MapViewer({
           return (
             <Marker key={truck._id || truck.id || idx} position={truckPos} icon={truckIcon}>
               <Popup className="futuristic-popup">
-                <div className="p-3 bg-[#0B101D] text-white rounded-xl min-w-[210px] border border-amber-500/30">
+                <div className="p-3 bg-slate-900 text-white rounded-xl min-w-[210px] border border-orange-500/30">
                   <div className="flex justify-between items-center mb-1 pb-1 border-b border-slate-800">
-                    <span className="text-[10px] font-mono text-amber-400 font-black tracking-wider uppercase">
+                    <span className="text-[10px] font-mono text-orange-400 font-black tracking-wider uppercase">
                       {truck.plateNumber}
                     </span>
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border ${
                       truck.status === 'Available'
                         ? 'bg-emerald-950 text-emerald-300 border-emerald-500/40'
-                        : 'bg-cyan-950 text-cyan-300 border-cyan-500/40'
+                        : 'bg-orange-950 text-orange-300 border-orange-500/40'
                     }`}>
                       {truck.status || 'Available'}
                     </span>
@@ -361,11 +371,11 @@ export default function MapViewer({
                   
                   <div className="mt-2 space-y-1 text-[11px] text-slate-400">
                     <p className="flex items-center gap-1.5">
-                      <MapPin size={11} className="text-red-400 shrink-0" />
+                      <MapPin size={11} className="text-rose-400 shrink-0" />
                       <span>{truck.loc}</span>
                     </p>
                     <p className="flex items-center gap-1.5">
-                      <User size={11} className="text-cyan-400 shrink-0" />
+                      <User size={11} className="text-orange-400 shrink-0" />
                       <span>{truck.driverName || 'Driver'} {truck.driverMobile ? `(${truck.driverMobile})` : ''}</span>
                     </p>
                   </div>
@@ -374,7 +384,7 @@ export default function MapViewer({
                     <button
                       type="button"
                       onClick={() => onAssignTruck(truck)}
-                      className="w-full mt-3 py-1.5 px-3 rounded-lg bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-md"
+                      className="w-full mt-3 py-1.5 px-3 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-md"
                     >
                       {isUrdu ? 'گاڑی مقرر کریں' : 'Assign to Shipment'}
                     </button>
@@ -389,9 +399,9 @@ export default function MapViewer({
         {!route && !trucks && coordinates && (
           <Marker position={center} icon={defaultIcon}>
             <Popup className="futuristic-popup">
-              <div className="p-3 bg-[#0B101D] text-white rounded-xl min-w-[200px] border border-amber-500/30">
-                <div className="text-[10px] font-mono text-amber-400 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
-                  <Truck size={12} className="text-cyan-400" />
+              <div className="p-3 bg-slate-900 text-white rounded-xl min-w-[200px] border border-orange-500/30">
+                <div className="text-[10px] font-mono text-orange-400 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <Truck size={12} className="text-[#F89020]" />
                   <span>Live Vehicle Telemetry</span>
                 </div>
                 <div className="text-xs font-semibold text-slate-200">{popupText}</div>

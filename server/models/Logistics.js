@@ -76,7 +76,7 @@ const Cargo = sequelize.define('Cargo', {
     references: { model: User, key: 'id' }
   },
   status: {
-    type: DataTypes.ENUM('Draft', 'Pending', 'Accepted', 'Truck Assigned', 'Loaded', 'In Transit', 'Delivered', 'Completed'),
+    type: DataTypes.ENUM('Draft', 'Pending', 'Accepted', 'Rejected', 'Truck Assigned', 'Loaded', 'In Transit', 'Delivered', 'Completed'),
     defaultValue: 'Pending'
   },
   products: {

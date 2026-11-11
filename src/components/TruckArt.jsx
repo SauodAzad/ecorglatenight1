@@ -1,47 +1,28 @@
 import React from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
+import Tilt3DCard from './Tilt3DCard';
 
 /**
- * ChamakRibbon - Radiant Multi-Color Chamak Patti reflective chevron ribbon.
- * Features vibrant Pakistani truck art reflective tape patterns (Ruby Red, Chrome Yellow, Hot Pink, Turquoise, Parrot Green, White).
+ * ChamakRibbon - Removed as requested by user.
  */
-export const ChamakRibbon = ({ className = '', height = 'h-2' }) => (
-  <div className={`w-full overflow-hidden ${height} ${className}`}>
-    <div 
-      className="w-full h-full"
-      style={{
-        background: `repeating-linear-gradient(
-          135deg,
-          #7C3AED 0px,
-          #7C3AED 12px,
-          #0284C7 12px,
-          #0284C7 24px,
-          #10B981 24px,
-          #10B981 36px,
-          #FACC15 36px,
-          #FACC15 48px,
-          #E11D48 48px,
-          #E11D48 58px,
-          #FFFFFF 58px,
-          #FFFFFF 64px
-        )`,
-        boxShadow: '0 1px 8px rgba(2, 132, 199, 0.25), 0 1px 4px rgba(124, 58, 237, 0.2)'
-      }}
-    />
-  </div>
-);
+export const ChamakRibbon = () => null;
 
 /**
  * TruckMorBadge - Majestic Truck Art Peacock ("مور") badge.
  * Shows only the selected language (either Urdu or English, never both).
  */
-export const TruckMorBadge = ({ text, subtext, className = '' }) => {
+export const TruckMorBadge = ({ text, subtext, className = '', light = false }) => {
   const { isUrdu, t } = useLanguage();
   const label = isUrdu ? (text || t('badgePeacock')) : (subtext || t('badgePeacock'));
+  const tone = light
+    ? 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 shadow-2xs'
+    : 'border-white/15 bg-[#0B1325]/92 text-slate-100 hover:border-orange-400/40 shadow-[0_6px_16px_rgba(2,6,23,0.45)]';
   return (
-    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-400/90 bg-gradient-to-r from-sky-50/90 via-purple-50/80 to-emerald-50/90 backdrop-blur-md text-slate-800 text-xs shadow-[0_2px_12px_rgba(2,132,199,0.18)] hover:shadow-[0_4px_16px_rgba(2,132,199,0.3)] transition-all animate-float-slow select-none ${className}`}>
-      <span className="text-base select-none">🦚</span>
-      <span className={isUrdu ? "font-urdu font-black text-xs text-purple-900" : "font-sans font-extrabold text-xs text-purple-950 tracking-tight"}>
+    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs transition-all select-none ${tone} ${className}`}>
+      <span className={light ? 'inline-flex items-center shrink-0' : 'inline-flex items-center shrink-0 rounded-md bg-white px-1 py-0.5 shadow-2xs preserve-light'}>
+        <img src="/logo.jpg?v=2" alt="E-CARGO-BILTY" className="w-7 h-5 object-contain select-none shrink-0" />
+      </span>
+      <span className={isUrdu ? `font-urdu font-black text-xs ${light ? 'text-slate-800' : 'text-slate-100'}` : `font-sans font-bold text-xs tracking-tight ${light ? 'text-slate-700' : 'text-slate-100'}`}>
         {label}
       </span>
     </div>
@@ -52,13 +33,19 @@ export const TruckMorBadge = ({ text, subtext, className = '' }) => {
  * NazarBattuBadge - Protective talisman badge.
  * Shows only the selected language (either Urdu or English, never both).
  */
-export const NazarBattuBadge = ({ text, className = '' }) => {
+export const NazarBattuBadge = ({ text, className = '', dark = true }) => {
   const { isUrdu, t } = useLanguage();
   const label = isUrdu ? (text || t('badgeNazar')) : t('badgeNazar');
   return (
-    <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-purple-400/80 bg-purple-50/90 backdrop-blur-md text-purple-950 text-xs font-bold shadow-[0_2px_10px_rgba(124,58,237,0.15)] hover:shadow-[0_4px_14px_rgba(124,58,237,0.25)] transition-all animate-float-reverse select-none ${className}`}>
-      <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 border border-white shadow-xs"></span>
-      <span className={isUrdu ? "font-urdu text-sm font-black text-purple-900" : "font-sans text-xs font-bold text-purple-900"}>
+    <div
+      className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border text-[11px] sm:text-xs font-bold shadow-2xs transition-all select-none whitespace-nowrap shrink-0 max-w-full ${
+        dark
+          ? 'border-white/20 bg-[#0B1325]/92 text-slate-100 hover:border-white/35'
+          : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300'
+      } ${className}`}
+    >
+      <span className="w-2 h-2 rounded-full bg-[#F89020] border border-white/25 shadow-2xs shrink-0"></span>
+      <span className={`truncate ${isUrdu ? `font-urdu text-xs sm:text-sm font-bold ${dark ? 'text-white' : 'text-slate-800'}` : `font-sans text-[11px] sm:text-xs font-bold ${dark ? 'text-slate-100' : 'text-slate-700'}`}`}>
         {label}
       </span>
     </div>
@@ -66,51 +53,9 @@ export const NazarBattuBadge = ({ text, className = '' }) => {
 };
 
 /**
- * TruckPatternBorder - Authentic Pakistani Truck Art Wavy Psychedelic Frame.
- * Recreated as crisp vector SVG directly matching the border around the Bedford truck and Peacock in the user's artwork.
- * Layered with Cyan, Royal Purple, Flame Amber, and Sun Yellow waves with ruby and emerald jewel rosettes.
+ * TruckPatternBorder - Removed as requested by user.
  */
-export const TruckPatternBorder = ({ className = '', height = 'h-7 sm:h-8', opacity = 'opacity-100' }) => (
-  <div className={`w-full overflow-hidden ${height} ${className} relative shadow-sm border-y-2 border-cyan-500 bg-[#0A192F]`}>
-    <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" className={opacity}>
-      <defs>
-        <pattern id="peacockTruckArtWavyBorder" width="160" height="32" patternUnits="userSpaceOnUse">
-          {/* Base deep navy blue from the truck art frame */}
-          <rect width="160" height="32" fill="#0A192F" />
-          
-          {/* Layer 1: Sky Blue / Cyan Wave */}
-          <path d="M0,16 Q40,-4 80,16 T160,16 L160,32 L0,32 Z" fill="#0284C7" />
-          
-          {/* Layer 2: Royal Violet / Purple Wave */}
-          <path d="M0,19 Q40,1 80,19 T160,19 L160,32 L0,32 Z" fill="#7C3AED" />
-          
-          {/* Layer 3: Flame Amber / Orange Wave */}
-          <path d="M0,22 Q40,6 80,22 T160,22 L160,32 L0,32 Z" fill="#F59E0B" />
-          
-          {/* Layer 4: Sun Chrome Yellow Highlight */}
-          <path d="M0,25 Q40,11 80,25 T160,25 L160,32 L0,32 Z" fill="#FACC15" />
-          
-          {/* Top Counter-Wave in Peacock Cyan */}
-          <path d="M0,14 Q40,32 80,14 T160,14 L160,0 L0,0 Z" fill="#0369A1" opacity="0.45" />
-          <path d="M0,10 Q40,26 80,10 T160,10 L160,0 L0,0 Z" fill="#38BDF8" opacity="0.3" />
-          
-          {/* Decorative Ruby Rosette Jewel at Upper Crest */}
-          <circle cx="40" cy="9" r="4" fill="#E11D48" stroke="#FACC15" strokeWidth="1" />
-          <circle cx="40" cy="9" r="1.5" fill="#FFFFFF" />
-          <circle cx="34" cy="9" r="1" fill="#FACC15" />
-          <circle cx="46" cy="9" r="1" fill="#FACC15" />
-
-          {/* Decorative Emerald Rosette Jewel at Lower Crest */}
-          <circle cx="120" cy="23" r="4" fill="#10B981" stroke="#FACC15" strokeWidth="1" />
-          <circle cx="120" cy="23" r="1.5" fill="#FFFFFF" />
-          <circle cx="114" cy="23" r="1" fill="#FACC15" />
-          <circle cx="126" cy="23" r="1" fill="#FACC15" />
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#peacockTruckArtWavyBorder)" />
-    </svg>
-  </div>
-);
+export const TruckPatternBorder = () => null;
 
 /**
  * TruckGhungrooTrim - Decorative hanging brass bells & tassels found under truck bumpers.
@@ -119,8 +64,8 @@ export const TruckGhungrooTrim = ({ className = '' }) => (
   <div className={`flex items-center justify-center gap-2 py-1 ${className}`}>
     {Array.from({ length: 20 }).map((_, i) => (
       <div key={i} className="flex flex-col items-center">
-        <div className="w-[1.5px] h-2 bg-gradient-to-b from-amber-400 to-purple-600"></div>
-        <div className={`w-2 h-2 rounded-full ${i % 3 === 0 ? 'bg-cyan-400 border border-purple-600' : i % 3 === 1 ? 'bg-yellow-400 border border-rose-500' : 'bg-emerald-500 border border-cyan-300'} shadow-xs`}></div>
+        <div className="w-[1.5px] h-2 bg-gradient-to-b from-slate-300 to-orange-400"></div>
+        <div className={`w-2 h-2 rounded-full ${i % 2 === 0 ? 'bg-[#F89020] border border-orange-700' : 'bg-slate-600 border border-slate-800'} shadow-xs`}></div>
       </div>
     ))}
   </div>
@@ -130,72 +75,79 @@ export const TruckGhungrooTrim = ({ className = '' }) => (
  * TruckLotusArchBadge - Mughal arched jharoka badge with lotus flower rosette & vibrant borders.
  * Shows only the selected language (either Urdu or English, never both).
  */
-export const TruckLotusArchBadge = ({ text, subtext = '', className = '' }) => {
+export const TruckLotusArchBadge = ({ text, subtext = '', className = '', light = false }) => {
   const { isUrdu, t } = useLanguage();
   const label = isUrdu ? (text || t('heritageBadge')) : (subtext || t('heritageBadge'));
   return (
-    <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-t-2xl rounded-b-lg bg-gradient-to-r from-cyan-600 via-purple-500 to-amber-500 p-[2px] shadow-sm ${className}`}>
-      <div className="bg-[#FFFDF7] px-3 py-0.5 rounded-t-[14px] rounded-b-[6px] flex items-center gap-1.5 border border-cyan-200">
-        <FloralRosette size={14} />
-        <span className={isUrdu ? "font-urdu font-bold text-xs text-purple-900" : "font-sans font-bold text-xs text-purple-900"}>
-          {label}
-        </span>
-      </div>
+    <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-t-2xl rounded-b-lg border transition-all ${
+      light
+        ? 'border-slate-200 bg-white shadow-2xs'
+        : 'border-white/15 bg-[#0B1325]/92 shadow-[0_6px_16px_rgba(2,6,23,0.45)]'
+    } ${className}`}>
+      <FloralRosette size={14} />
+      <span className={isUrdu
+        ? `font-urdu font-bold text-xs ${light ? 'text-slate-800' : 'text-slate-100'}`
+        : `font-sans font-bold text-xs ${light ? 'text-slate-700' : 'text-slate-100'}`
+      }>
+        {label}
+      </span>
     </div>
   );
 };
 
 /**
- * AjrakRibbon - Traditional Sindhi Ajrak geometric block-print border.
- * Features the iconic Sindhi trefoil & border in crimson red and mustard gold.
+ * AjrakRibbon - Removed as requested by user.
  */
-export const AjrakRibbon = ({ className = '', height = 'h-2' }) => (
-  <div className={`w-full overflow-hidden ${height} ${className}`}>
-    <div 
-      className="w-full h-full"
-      style={{
-        background: `repeating-linear-gradient(
-          90deg,
-          #991B1B 0px,
-          #991B1B 8px,
-          #FEF3C7 8px,
-          #FEF3C7 10px,
-          #D97706 10px,
-          #D97706 18px,
-          #0284C7 18px,
-          #0284C7 22px,
-          #991B1B 22px,
-          #991B1B 30px
-        )`,
-        borderBottom: '1px solid #7F1D1D'
-      }}
-    />
-  </div>
-);
+export const AjrakRibbon = () => null;
 
 /**
- * TruckBackground - Fixed Viewport Ultra-Crisp Pakistani Decorated Truck Art backdrop.
- * Uses fixed positioning to prevent vertical stretching over long pages (which caused blurriness).
- * Rendered at 100% crisp sharpness with zero milky blur or hazy overlays.
+ * TruckBackground - Fixed Viewport Pakistani Decorated Truck Art backdrop.
+ * Supports optional frosted glossy blur + GPU-composited mouse parallax depth.
  */
-export const TruckBackground = ({ 
+export const TruckBackground = ({
   image = '/images/peacock_truck_art_bg.jpg',
   opacity = 'opacity-100',
   overlay = false,
+  glossyBlur = false,
   className = ''
 }) => (
   <div className={`fixed inset-0 pointer-events-none overflow-hidden z-0 select-none ${className}`}>
-    <img 
-      src={image} 
-      alt="Pakistani Decorated Truck & Peacock Art" 
-      className={`w-full h-full object-cover object-center ${opacity}`}
+    <img
+      src={image}
+      alt="Pakistani Decorated Cargo Truck"
+      className={`w-full h-full object-cover object-center ${glossyBlur ? 'transition-transform duration-300 ease-out' : ''} ${opacity}`}
       style={{
-        imageRendering: '-webkit-optimize-contrast',
-        filter: 'contrast(1.02) saturate(1.05)'
+        filter: glossyBlur ? 'blur(6px) contrast(1.06) saturate(1.22)' : undefined,
+        transform: glossyBlur
+          ? 'translate3d(calc(var(--mx, 0) * -14px), calc(var(--my, 0) * -10px), 0) scale(1.07)'
+          : undefined
       }}
+      decoding="async"
       loading="eager"
     />
-    {overlay && <div className="absolute inset-0 bg-slate-900/10 pointer-events-none" />}
+    {glossyBlur && (
+      <>
+        {/* Frosted Obsidian Glass & Warm/Cyan Atmospheric Gradient Scrim */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              'linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(11, 19, 37, 0.48) 34%, rgba(6, 11, 22, 0.62) 66%, rgba(6, 11, 22, 0.82) 100%), radial-gradient(circle at 22% 20%, rgba(249, 115, 22, 0.18) 0%, transparent 48%), radial-gradient(circle at 80% 78%, rgba(34, 211, 238, 0.15) 0%, transparent 50%)'
+          }}
+        />
+        {/* Dynamic Glossy Specular Sheen Layer driven by Parallax (--mx, --my) */}
+        <div
+          aria-hidden="true"
+          className="absolute -inset-24 pointer-events-none transition-transform duration-300 ease-out"
+          style={{
+            transform: 'translate3d(calc(var(--mx, 0) * 28px), calc(var(--my, 0) * 20px), 0)',
+            background:
+              'radial-gradient(680px circle at 50% 35%, rgba(255, 255, 255, 0.10) 0%, rgba(249, 115, 22, 0.06) 35%, transparent 70%)'
+          }}
+        />
+      </>
+    )}
+    {overlay && <div className="absolute inset-0 bg-slate-900/15 pointer-events-none" />}
   </div>
 );
 
@@ -207,103 +159,126 @@ export const AjrakBackground = TruckBackground;
  * Used on the landing page and dashboards to proudly showcase Khyber & Sindh truck art.
  * Shows only the selected language (Urdu or English, never both at once).
  */
-export const TruckPhotoShowcase = ({ 
+export const TruckPhotoShowcase = ({
   image = '/images/peacock_truck_art_bg.jpg',
   caption = 'ای کارگو بلٹی • محفوظ اور بااعتماد ترسیل',
   subcaption = 'Commercial Fleet • Verified Freight Transit Across Pakistan',
   tag = 'محفوظ ترسیل',
   tagEn = 'Safe Transit',
-  className = ''
+  dark = false,
+  className = '',
+  onClick,
+  ctaLabel
 }) => {
   const { isUrdu } = useLanguage();
   const activeTitle = isUrdu ? caption : subcaption;
   const activeTag = isUrdu ? tag : tagEn;
+  const isInteractive = typeof onClick === 'function';
+
+  const handleKeyDown = (e) => {
+    if (!isInteractive) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick(e);
+    }
+  };
 
   return (
-    <div className={`relative rounded-2xl overflow-hidden border-2 border-cyan-400 shadow-xl bg-white group hover:border-purple-400 transition-all ${className}`}>
-      <div className="relative h-56 sm:h-80 overflow-hidden bg-slate-900">
-        <img 
-          src={image} 
-          alt={activeTitle}
-          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700" 
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent" />
-        <div className="absolute top-3 left-3 flex items-center gap-2">
-          <UrduMotto text={activeTag} translation={activeTag} />
-          <NazarBattuBadge />
-        </div>
-        <div className="absolute bottom-3 left-3 right-3 text-white flex items-end justify-between">
-          <div>
-            <p className={isUrdu ? "font-urdu text-2xl font-black text-yellow-300 drop-shadow-md" : "font-sans text-base font-bold text-yellow-300 drop-shadow-md"}>
-              {activeTitle}
-            </p>
+    <Tilt3DCard
+      maxTilt={3.5}
+      scale={1.012}
+      glareOpacity={0.18}
+      glareRoundedClass="rounded-2xl"
+      className={className}
+    >
+      <div
+        role={isInteractive ? 'button' : undefined}
+        tabIndex={isInteractive ? 0 : undefined}
+        onClick={isInteractive ? onClick : undefined}
+        onKeyDown={isInteractive ? handleKeyDown : undefined}
+        className={`relative rounded-2xl overflow-hidden border transition-colors duration-200 group ${
+          isInteractive ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-400/70' : ''
+        } ${
+          dark
+            ? 'border-white/15 bg-slate-900 shadow-lg hover:border-orange-400/60'
+            : 'border-slate-200/90 shadow-sm hover:shadow-lg bg-white hover:border-slate-300'
+        }`}
+      >
+        <div className="relative h-56 sm:h-64 overflow-hidden bg-slate-900">
+          <img
+            src={image}
+            alt={activeTitle}
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover object-center group-hover:scale-103 transition-transform duration-300"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/40 to-slate-950/20" />
+          <div className="absolute inset-0 p-3 sm:p-3.5 flex flex-col justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+              <UrduMotto text={activeTag} translation={activeTag} dark={dark} />
+              <NazarBattuBadge dark={dark} />
+            </div>
+            <div className="text-white flex flex-col gap-2 min-w-0">
+              <div className={`min-w-0 ${isUrdu ? 'border-r-2 border-[#F89020] pr-2.5 text-right' : 'border-l-2 border-[#F89020] pl-2.5 text-left'}`}>
+                <p className={isUrdu ? "font-urdu text-base sm:text-xl font-black text-white leading-snug line-clamp-2" : "font-sans text-[13px] sm:text-base font-bold text-white leading-snug line-clamp-2"}>
+                  {activeTitle}
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                {ctaLabel ? (
+                  <span
+                    className={`${isUrdu ? 'font-urdu text-xs' : 'font-mono text-[10px] sm:text-[11px]'} inline-flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-orange-500/95 group-hover:bg-orange-400 text-white font-bold shadow-md whitespace-nowrap shrink-0 transition-colors`}
+                  >
+                    <span>{ctaLabel}</span>
+                    <span aria-hidden="true">{isUrdu ? '←' : '→'}</span>
+                  </span>
+                ) : <span />}
+                <TruckTaj size={24} className="shrink-0" />
+              </div>
+            </div>
           </div>
-          <TruckTaj size={32} />
         </div>
       </div>
-      <ChamakRibbon height="h-2.5" />
-    </div>
+    </Tilt3DCard>
   );
 };
 
 /**
- * SindhiTruckTexture - Visible textured band/border used directly on truck cards and panel trims.
+ * SindhiTruckTexture - Removed as requested by user.
  */
-export const SindhiTruckTexture = ({ className = '', height = 'h-3' }) => (
-  <div className={`w-full overflow-hidden ${height} ${className} relative`}>
-    <div 
-      className="w-full h-full"
-      style={{
-        background: `repeating-linear-gradient(
-          45deg,
-          #991B1B 0px,
-          #991B1B 10px,
-          #FEF3C7 10px,
-          #FEF3C7 12px,
-          #D97706 12px,
-          #D97706 22px,
-          #FBBF24 22px,
-          #FBBF24 25px,
-          #B91C1C 25px,
-          #B91C1C 35px
-        )`,
-        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.1)'
-      }}
-    />
-  </div>
-);
+export const SindhiTruckTexture = () => null;
 
 /**
  * TruckTaj - Traditional Khyber Pass & Rawalpindi ornamental crown/taj motif.
  * Crown rendered in golden brass, ruby crimson, and turquoise enamel.
  */
-export const TruckTaj = ({ size = 28, className = '', color = '#D97706' }) => (
-  <svg 
-    width={size} 
-    height={size * 0.55} 
-    viewBox="0 0 100 55" 
-    fill="none" 
+export const TruckTaj = ({ size = 28, className = '', color = '#EA580C' }) => (
+  <svg
+    width={size}
+    height={size * 0.55}
+    viewBox="0 0 100 55"
+    fill="none"
     xmlns="http://www.w3.org/2000/svg"
     className={`inline-block ${className}`}
   >
     {/* Crown Base */}
-    <path 
-      d="M10 50 L90 50 L95 42 L80 40 L88 22 L72 32 L60 8 L50 25 L40 8 L28 32 L12 22 L20 40 L5 42 Z" 
-      fill="url(#tajGoldRedGrad)" 
-      stroke="#7F1D1D" 
+    <path
+      d="M10 50 L90 50 L95 42 L80 40 L88 22 L72 32 L60 8 L50 25 L40 8 L28 32 L12 22 L20 40 L5 42 Z"
+      fill="url(#tajGoldOrangeGrad)"
+      stroke="#334155"
       strokeWidth="1.5"
     />
     {/* Center Jewels */}
-    <circle cx="50" cy="22" r="4.5" fill="#D90429" stroke="#FEF3C7" strokeWidth="1" />
-    <circle cx="30" cy="30" r="3.5" fill="#0284C7" stroke="#FEF3C7" strokeWidth="1" />
-    <circle cx="70" cy="30" r="3.5" fill="#0284C7" stroke="#FEF3C7" strokeWidth="1" />
-    <circle cx="50" cy="38" r="5" fill="#FFB703" stroke="#991B1B" strokeWidth="1" />
+    <circle cx="50" cy="22" r="4.5" fill="#F89020" stroke="#FFF7ED" strokeWidth="1" />
+    <circle cx="30" cy="30" r="3.5" fill="#475569" stroke="#FFF7ED" strokeWidth="1" />
+    <circle cx="70" cy="30" r="3.5" fill="#475569" stroke="#FFF7ED" strokeWidth="1" />
+    <circle cx="50" cy="38" r="5" fill="#EA580C" stroke="#1E293B" strokeWidth="1" />
     <defs>
-      <linearGradient id="tajGoldRedGrad" x1="0" y1="0" x2="100" y2="55" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#D90429" />
-        <stop offset="35%" stopColor="#F59E0B" />
-        <stop offset="70%" stopColor="#FFB703" />
-        <stop offset="100%" stopColor="#B91C1C" />
+      <linearGradient id="tajGoldOrangeGrad" x1="0" y1="0" x2="100" y2="55" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#EA580C" />
+        <stop offset="35%" stopColor="#F89020" />
+        <stop offset="70%" stopColor="#FB923C" />
+        <stop offset="100%" stopColor="#C2410C" />
       </linearGradient>
     </defs>
   </svg>
@@ -313,30 +288,30 @@ export const TruckTaj = ({ size = 28, className = '', color = '#D97706' }) => (
  * FloralRosette - Sindhi Jandi & Truck Art brass flower medallion
  */
 export const FloralRosette = ({ size = 20, className = '' }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 40 40" 
-    fill="none" 
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 40 40"
+    fill="none"
     xmlns="http://www.w3.org/2000/svg"
     className={`inline-block ${className}`}
   >
-    <circle cx="20" cy="20" r="18" stroke="#D97706" strokeWidth="1.2" fill="#FEF3C7" />
-    {/* 8 Petals in Red & Yellow */}
+    <circle cx="20" cy="20" r="18" stroke="#EA580C" strokeWidth="1.2" fill="#FFF7ED" />
+    {/* 8 Petals in Logistics Orange & Charcoal Slate */}
     {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, i) => (
-      <ellipse 
-        key={i} 
-        cx="20" 
-        cy="11" 
-        rx="3.5" 
-        ry="7" 
-        fill={i % 2 === 0 ? '#D90429' : '#F59E0B'} 
-        stroke="#7F1D1D" 
+      <ellipse
+        key={i}
+        cx="20"
+        cy="11"
+        rx="3.5"
+        ry="7"
+        fill={i % 2 === 0 ? '#F89020' : '#475569'}
+        stroke="#1E293B"
         strokeWidth="0.6"
-        transform={`rotate(${angle} 20 20)`} 
+        transform={`rotate(${angle} 20 20)`}
       />
     ))}
-    <circle cx="20" cy="20" r="5" fill="#0284C7" stroke="#FFFFFF" strokeWidth="1" />
+    <circle cx="20" cy="20" r="5" fill="#EA580C" stroke="#FFFFFF" strokeWidth="1" />
   </svg>
 );
 
@@ -344,16 +319,26 @@ export const FloralRosette = ({ size = 20, className = '' }) => (
  * UrduMotto / TruckPoetry - Authentic Pakistani truck poetry & slogans.
  * Shows only the selected language (either Urdu or English, never both).
  */
-export const UrduMotto = ({ text, translation, className = '' }) => {
+export const UrduMotto = ({ text, translation, className = '', dark = true }) => {
   const { isUrdu, t } = useLanguage();
   const label = isUrdu ? (text || t('mottoLookLove')) : (translation || t('mottoLookLove'));
   return (
-    <div 
-      className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border border-amber-300/90 bg-gradient-to-r from-amber-50/90 via-red-50/80 to-amber-50/90 backdrop-blur-md text-amber-950 text-xs shadow-[0_2px_10px_rgba(245,158,11,0.15)] hover:shadow-[0_4px_14px_rgba(245,158,11,0.25)] transition-all animate-float-pulse select-none ${className}`}
+    <div
+      className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border text-[11px] sm:text-xs shadow-xs hover:shadow-sm transition-all select-none whitespace-nowrap shrink-0 max-w-full ${
+        dark
+          ? 'border-orange-400/35 bg-slate-950/90 text-orange-200'
+          : 'border-orange-200 bg-orange-50 text-orange-900'
+      } ${className}`}
       title={label}
     >
-      <TruckTaj size={15} />
-      <span className={isUrdu ? "font-urdu text-[12px] font-bold tracking-wide text-red-900" : "font-sans text-[11px] font-bold tracking-wide text-red-900"}>
+      <TruckTaj size={14} className="shrink-0" />
+      <span
+        className={`truncate ${
+          isUrdu
+            ? `font-urdu text-[11px] sm:text-[12px] font-bold tracking-wide ${dark ? 'text-orange-200' : 'text-orange-800'}`
+            : `font-sans text-[10px] sm:text-[11px] font-bold tracking-wide ${dark ? 'text-orange-200' : 'text-orange-800'}`
+        }`}
+      >
         {label}
       </span>
     </div>
@@ -364,30 +349,44 @@ export const UrduMotto = ({ text, translation, className = '' }) => {
  * TruckPoetryBanner - Traditional decorated poetry ribbon found across truck body panels.
  * Shows only the selected language (either Urdu or English, never both).
  */
-export const TruckPoetryBanner = ({ 
-  text, 
-  subtext, 
-  className = '' 
+export const TruckPoetryBanner = ({
+  text,
+  subtext,
+  className = '',
+  light = false
 }) => {
   const { isUrdu, t } = useLanguage();
   const mainText = isUrdu ? (text || t('poetryBanner')) : (subtext || t('poetryBanner'));
   const secondaryText = isUrdu ? t('poetrySubtext') : t('poetrySubtext');
   return (
-    <div className={`relative px-4 py-2.5 rounded-2xl border-2 border-cyan-400 bg-gradient-to-r from-sky-50/95 via-purple-50/90 to-amber-50/95 backdrop-blur-xl text-center shadow-[0_10px_30px_rgba(2,132,199,0.16)] overflow-hidden transition-all duration-300 hover:shadow-[0_14px_38px_rgba(2,132,199,0.25)] ${className}`}>
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-pink-500 via-yellow-400 via-cyan-500 to-purple-600" />
-      <div className="flex items-center justify-center gap-3">
-        <FloralRosette size={18} />
-        <span className={isUrdu ? "font-urdu text-lg font-black text-cyan-950 drop-shadow-xs" : "font-sans text-sm font-black text-cyan-950 drop-shadow-xs"}>
+    <div className={`relative px-4 py-2.5 rounded-2xl border text-center overflow-hidden transition-colors duration-200 ${
+      light
+        ? 'border-slate-200 bg-white shadow-xs hover:shadow-sm'
+        : 'border-white/15 bg-[#0B1325]/94 shadow-[0_12px_28px_rgba(2,6,23,0.48)] hover:border-white/25'
+    } ${className}`}>
+      <div className={light
+        ? 'absolute top-0 left-0 right-0 h-1 bg-[#F89020]'
+        : 'absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-orange-500 via-amber-400 to-cyan-400'
+      } />
+      <div className="flex items-center justify-center gap-2 sm:gap-3 min-w-0">
+        <FloralRosette size={16} className="shrink-0" />
+        <span className={isUrdu
+          ? `font-urdu text-base sm:text-lg font-black leading-snug ${light ? 'text-slate-900' : 'text-white'}`
+          : `font-sans text-xs sm:text-sm font-black leading-snug ${light ? 'text-slate-900' : 'text-white'}`
+        }>
           {mainText}
         </span>
-        <FloralRosette size={18} />
+        <FloralRosette size={16} className="shrink-0" />
       </div>
       {secondaryText && (
-        <p className={`text-[10px] tracking-wider text-purple-950 font-bold mt-0.5 ${isUrdu ? 'font-urdu' : 'font-mono uppercase'}`}>
+        <p className={`text-[10px] tracking-wider font-bold mt-0.5 ${light ? 'text-slate-600' : 'text-slate-300'} ${isUrdu ? 'font-urdu' : 'font-mono uppercase'}`}>
           {secondaryText}
         </p>
       )}
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-600 via-cyan-500 via-yellow-400 to-pink-500" />
+      <div className={light
+        ? 'absolute bottom-0 left-0 right-0 h-1 bg-[#F89020]'
+        : 'absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-cyan-400 via-amber-400 to-orange-500 opacity-75'
+      } />
     </div>
   );
 };
@@ -396,12 +395,12 @@ export const TruckPoetryBanner = ({
  * WorkshopBadge - Decorative artisan/workshop badge.
  * Shows only the selected language (either Urdu or English, never both).
  */
-export const WorkshopBadge = ({ className = '' }) => {
+export const WorkshopBadge = ({ className = '', dark = true }) => {
   const { isUrdu, t } = useLanguage();
   return (
-    <div className={`flex items-center gap-2 text-[11px] text-amber-950 ${isUrdu ? 'font-urdu' : 'font-mono'} ${className}`}>
-      <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse shadow-xs"></span>
-      <span className="font-bold text-red-900">
+    <div className={`flex items-center gap-2 text-[11px] ${dark ? 'text-slate-300' : 'text-slate-700'} ${isUrdu ? 'font-urdu' : 'font-mono'} ${className}`}>
+      <span className={`w-2.5 h-2.5 rounded-full animate-pulse shadow-xs ${dark ? 'bg-emerald-400 shadow-emerald-400/50' : 'bg-[#F89020]'}`}></span>
+      <span className={`font-bold ${dark ? 'text-slate-100' : 'text-slate-800'}`}>
         {t('badgeWorkshop')}
       </span>
     </div>

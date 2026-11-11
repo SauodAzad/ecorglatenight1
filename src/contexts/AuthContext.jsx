@@ -21,6 +21,24 @@ export function AuthProvider({ children }) {
     localStorage.setItem('token', data.token);
     setCurrentUser(data.user);
     setUserData(data.user);
+    connectUserSocket(data.user);
+    return data;
+  }
+
+  const connectUserSocket = (user) => {
+    const uid = user?.id || user?._id;
+    if (!uid) return;
+    if (!socket.connected) {
+      socket.connect();
+    }
+    socket.emit('join', uid.toString());
+  };
+
+  async function refreshUser() {
+    const { data } = await authAPI.getMe();
+    setCurrentUser(data);
+    setUserData(data);
+    connectUserSocket(data);
     return data;
   }
 
@@ -29,6 +47,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('token', data.token);
     setCurrentUser(data.user);
     setUserData(data.user);
+    connectUserSocket(data.user);
     return data;
   }
 
@@ -58,16 +77,14 @@ export function AuthProvider({ children }) {
     checkAuth();
   }, []);
 
-  const value = { currentUser, userData, login, signup, register: signup, logout };
+  const value = { currentUser, userData, login, signup, register: signup, logout, refreshUser };
 
   return (
     <AuthContext.Provider value={value}>
       {loading ? (
-        <div className="min-h-screen bg-dark-bg flex flex-col items-center justify-center">
-          <div className="relative">
-            <div className="w-16 h-16 rounded-full border-t-2 border-neon-blue animate-spin"></div>
-          </div>
-          <p className="mt-4 text-xs font-bold tracking-widest text-neon-blue uppercase animate-pulse">Connecting to Logistics Hub</p>
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+          <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-orange-600 animate-spin" />
+          <p className="mt-4 text-xs font-bold tracking-widest text-slate-600 uppercase">Connecting to Logistics Hub</p>
         </div>
       ) : children}
     </AuthContext.Provider>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useToast } from '../../contexts/ToastContext';
 import { 
   Users, FileText, Activity, AlertTriangle, Check, X, XCircle, Shield, 
   Package, Trash2, CheckCircle, Loader2, ArrowRight, Truck, 
@@ -9,9 +10,9 @@ import {
 } from 'lucide-react';
 import { logisticsAPI, authAPI, adminAPI, socket } from '../../api';
 import BiltyModal from '../../components/BiltyModal';
-import { ChamakRibbon, TruckTaj, UrduMotto, WorkshopBadge, TruckPoetryBanner, TruckPatternBorder, TruckLotusArchBadge, TruckMorBadge, NazarBattuBadge } from '../../components/TruckArt';
+import { ChamakRibbon, TruckTaj, UrduMotto, WorkshopBadge, TruckPoetryBanner, TruckLotusArchBadge, TruckMorBadge, NazarBattuBadge } from '../../components/TruckArt';
 import MapViewer from '../../components/MapViewer';
-import { calculateFreightTariff, VEHICLE_MULTIPLIERS, getIntercityDistance } from '../../utils/fareCalculator';
+import { calculateFreightTariff, VEHICLE_MULTIPLIERS, getIntercityDistance, formatFreightPrice, formatWeightTons } from '../../utils/fareCalculator';
 import SearchSelect from '../../components/SearchSelect';
 import UnitInput from '../../components/UnitInput';
 import FormField from '../../components/FormField';
@@ -38,8 +39,10 @@ const safeJsonParse = (val, fallback) => {
 export default function TransporterDashboard() {
   const { userData, currentUser } = useAuth();
   const { isUrdu } = useLanguage();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('requests');
   const [loading, setLoading] = useState(true);
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
   // Live state arrays
   const [cargoRequests, setCargoRequests] = useState([]); // All cargo
@@ -77,6 +80,38 @@ export default function TransporterDashboard() {
   const [biltyModalBooking, setBiltyModalBooking] = useState(null);
   const chatEndRef = useRef(null);
 
+  useEffect(() => {
+    const onUiBack = (e) => {
+      if (biltyModalBooking) {
+        setBiltyModalBooking(null);
+        e.preventDefault();
+        return;
+      }
+      if (showAssignModal) {
+        setShowAssignModal(false);
+        e.preventDefault();
+        return;
+      }
+      if (rejectingCargoId) {
+        setRejectingCargoId(null);
+        setRejectionReason('');
+        e.preventDefault();
+        return;
+      }
+      if (selectedBooking) {
+        setSelectedBooking(null);
+        e.preventDefault();
+        return;
+      }
+      if (activeTab !== 'requests') {
+        setActiveTab('requests');
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('ecargo:ui-back', onUiBack);
+    return () => window.removeEventListener('ecargo:ui-back', onUiBack);
+  }, [biltyModalBooking, showAssignModal, rejectingCargoId, selectedBooking, activeTab]);
+
   const fetchData = async () => {
     if (currentUser) {
       try {
@@ -110,9 +145,21 @@ export default function TransporterDashboard() {
 
   useEffect(() => {
     if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [selectedBooking?.messages]);
+
+  useEffect(() => {
+    if (!rejectingCargoId && !showAssignModal) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setRejectingCargoId(null);
+        setShowAssignModal(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [rejectingCargoId, showAssignModal]);
 
   // Sync selected booking details when bookings refresh
   useEffect(() => {
@@ -128,24 +175,35 @@ export default function TransporterDashboard() {
       setRejectionReason('');
       return;
     }
+    if (isSubmittingAction) return;
+    setIsSubmittingAction(true);
     try {
       await logisticsAPI.respondToCargo(cargoId, { status });
+      toast.success('Cargo request accepted! You can now dispatch a truck to it.');
       fetchData();
     } catch (e) {
       console.error(e);
+      toast.error(e.response?.data?.message || 'Failed to update cargo status.');
+    } finally {
+      setIsSubmittingAction(false);
     }
   };
 
   const handleConfirmRejection = async (e) => {
     e.preventDefault();
-    if (!rejectionReason) return;
+    if (!rejectionReason || isSubmittingAction) return;
+    setIsSubmittingAction(true);
     try {
       await logisticsAPI.respondToCargo(rejectingCargoId, { status: 'Rejected', rejectionReason });
       setRejectingCargoId(null);
       setRejectionReason('');
+      toast.info('Cargo request rejected.');
       fetchData();
     } catch (error) {
       console.error(error);
+      toast.error(error.response?.data?.message || 'Failed to reject cargo request.');
+    } finally {
+      setIsSubmittingAction(false);
     }
   };
 
@@ -208,6 +266,8 @@ export default function TransporterDashboard() {
       setAssignFormErrors(errors);
       return;
     }
+    if (isSubmittingAction) return;
+    setIsSubmittingAction(true);
 
     try {
       const truckId = selectedTruckForAssign._id || selectedTruckForAssign.id;
@@ -233,24 +293,27 @@ export default function TransporterDashboard() {
       setSelectedCargoForAssign(null);
       setSelectedTruckForAssign(null);
       fetchData();
-      alert("Booking request submitted to Truck Owner!");
+      toast.success("Booking request submitted to Truck Owner!");
     } catch (error) {
       console.error("Error creating booking:", error.response?.data || error.message);
-      alert(`Error: ${error.response?.data?.message || error.message}`);
+      toast.error(`Error: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setIsSubmittingAction(false);
     }
   };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!chatMessageText || !selectedBooking) return;
+    if (!chatMessageText.trim() || !selectedBooking) return;
     try {
       await logisticsAPI.updateBooking(selectedBooking._id || selectedBooking.id, {
-        $push: { messages: { sender: userData.name, text: chatMessageText } }
+        $push: { messages: { sender: userData.name, text: chatMessageText.trim() } }
       });
       setChatMessageText('');
       fetchData();
     } catch (e) {
       console.error(e);
+      toast.error('Failed to send message.');
     }
   };
 
@@ -261,26 +324,31 @@ export default function TransporterDashboard() {
   const getStatusBadgeStyle = (status) => {
     switch (status?.toUpperCase()) {
       case 'IN TRANSIT':
-        return 'bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold';
+        return 'bg-orange-50 text-orange-700 border border-orange-200 font-bold';
       case 'DELIVERED':
       case 'COMPLETED':
-        return 'bg-purple-50 text-purple-800 border border-purple-300 font-bold';
+        return 'bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold';
       case 'LOADED':
-        return 'bg-amber-50 text-amber-800 border border-amber-300 font-bold';
+        return 'bg-amber-50 text-amber-800 border border-amber-200 font-bold';
+      case 'ACCEPTED':
+        return 'bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold';
       case 'TRUCK ASSIGNED':
-        return 'bg-sky-50 text-sky-800 border border-sky-300 font-bold';
+        return 'bg-slate-100 text-slate-700 border border-slate-200 font-bold';
       case 'PENDING':
-        return 'bg-yellow-50 text-yellow-800 border border-yellow-300 font-bold';
+        return 'bg-amber-50 text-amber-700 border border-amber-200 font-bold';
+      case 'REJECTED':
+      case 'CANCELLED':
+        return 'bg-rose-50 text-rose-700 border border-rose-200 font-bold';
       default:
-        return 'bg-slate-100 text-slate-700 border border-slate-300 font-bold';
+        return 'bg-slate-100 text-slate-700 border border-slate-200 font-bold';
     }
   };
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="w-10 h-10 text-amber-600 animate-spin" />
-        <p className="text-sm text-amber-900 font-bold tracking-wider font-mono">
+        <Loader2 className="w-10 h-10 text-orange-600 animate-spin" />
+        <p className="text-sm text-slate-600 font-bold tracking-wider font-mono">
           {isUrdu ? 'براہ کرم انتظار کریں...' : 'LOADING OPERATOR CENTER...'}
         </p>
       </div>
@@ -290,42 +358,37 @@ export default function TransporterDashboard() {
   const pendingRequests = cargoRequests.filter(c => c.status === 'Pending');
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative page-enter">
-      {/* Truck Art Pattern Ribbon */}
-      <TruckPatternBorder height="h-7" className="rounded-xl mb-4 shadow-sm" />
-
+    <div className="dash-dark-theme max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-5 sm:py-8 relative page-enter">
       {/* Truck Poetry Banner */}
       <div className="mb-6 relative z-10">
         <TruckPoetryBanner />
       </div>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 relative z-10">
+      {/* Command Header Panel */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 relative z-10 rounded-2xl sm:rounded-3xl bg-[#0B1325]/96 border border-white/15 p-4 sm:p-6 shadow-[0_18px_48px_-14px_rgba(0,0,0,0.75)] overflow-hidden">
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-[#EA580C] via-[#F89020] to-cyan-400" />
         <div className="text-left">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <TruckMorBadge />
-            <span className="text-[11px] font-bold uppercase tracking-widest text-cyan-900 bg-cyan-100 px-2 py-0.5 rounded-md border border-cyan-300">Fleet Operations</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-orange-300 bg-orange-500/15 px-2.5 py-0.5 rounded-full border border-orange-400/35">Fleet Operations</span>
             <NazarBattuBadge />
           </div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2">
             <span>{isUrdu ? 'کارگو ٹرانسپورٹر ڈیش بورڈ' : 'Cargo Transporter Dashboard'}</span>
           </h1>
-          <p className="text-sm text-slate-600 mt-1 font-medium">{isUrdu ? 'کارپوریٹ شپنگ کی درخواستیں قبول کریں اور گاڑی ڈسپیچ کریں' : 'Accept corporate shipping requests, coordinate fleet logistics, and dispatch verified drivers.'}</p>
+          <p className="text-xs sm:text-sm text-slate-300 mt-1 font-medium">{isUrdu ? 'کارپوریٹ شپنگ کی درخواستیں قبول کریں اور گاڑی ڈسپیچ کریں' : 'Accept corporate shipping requests, coordinate fleet logistics, and dispatch verified drivers.'}</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex gap-2 bg-white/90 backdrop-blur-md border-2 border-cyan-400 px-4 py-2 rounded-xl text-xs text-cyan-950 font-mono shadow-sm">
-            <Clock size={14} className="text-purple-600 animate-pulse" />
+          <div className="flex items-center gap-2 bg-[#0F1930]/92 border border-white/15 px-3.5 py-2 rounded-xl text-xs text-slate-200 font-mono shadow-sm">
+            <Clock size={14} className="text-orange-400" />
             <span>Operations Live: {new Date().toLocaleDateString()}</span>
           </div>
         </div>
       </div>
 
-      {/* Chamak Ribbon */}
-      <ChamakRibbon height="h-[5px]" className="rounded-full mb-6 relative z-10" />
-
-      {/* Tabs navigation */}
-      <div className="border-b border-amber-200 mb-6 sm:mb-8 relative z-10 -mx-3 px-3 sm:mx-0 sm:px-0">
-        <nav className="flex gap-4 sm:gap-8 overflow-x-auto touch-scroll no-scrollbar pb-px">
+      {/* Tabs navigation (Obsidian Segmented Dock) */}
+      <div className="mb-6 sm:mb-8 relative z-10 overflow-x-auto touch-scroll no-scrollbar">
+        <nav className="inline-flex min-w-full sm:min-w-0 items-center gap-1.5 p-1.5 rounded-2xl bg-[#0B1325]/96 border border-white/15 shadow-[0_12px_28px_rgba(0,0,0,0.45)]">
           {[
             { id: 'requests', name: isUrdu ? 'نئی کارگو درخواستیں' : 'Incoming Requests', badge: pendingRequests.length },
             { id: 'trucks', name: isUrdu ? 'دستیاب گاڑیاں' : 'Available Trucks' },
@@ -338,15 +401,17 @@ export default function TransporterDashboard() {
                 setActiveTab(tab.id);
                 setSelectedBooking(null);
               }}
-              className={`pb-3 text-sm font-semibold transition-all duration-300 relative flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 relative flex items-center gap-2 cursor-pointer whitespace-nowrap ${
                 activeTab === tab.id 
-                  ? 'text-red-700 border-b-2 border-red-600 font-extrabold drop-shadow-sm scale-[1.02]' 
-                  : 'text-slate-600 hover:text-slate-900 hover:scale-[1.01]'
+                  ? 'bg-gradient-to-r from-[#EA580C] to-[#F97316] text-white shadow-[0_6px_18px_-4px_rgba(249,115,22,0.55)]' 
+                  : 'text-slate-300 hover:text-white hover:bg-white/[0.08]'
               }`}
             >
               {tab.name}
               {tab.badge !== undefined && tab.badge > 0 && (
-                <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none animate-pulse shadow-sm">
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                  activeTab === tab.id ? 'bg-white/25 text-white border border-white/30' : 'bg-orange-600 text-white animate-pulse shadow-sm'
+                }`}>
                   {tab.badge}
                 </span>
               )}
@@ -367,28 +432,28 @@ export default function TransporterDashboard() {
               const reqRecipients = Array.isArray(req.recipients) ? req.recipients : safeJsonParse(req.recipients, []);
 
               return (
-              <div key={req._id || req.id} className="glass-card border border-white/60 shadow-xl rounded-3xl p-6 space-y-4 transition-all duration-300 hover:shadow-2xl">
-                <div className="flex justify-between items-center border-b border-amber-200 pb-3">
+              <div key={req._id || req.id} className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6 space-y-4">
+                <div className="flex justify-between items-center border-b border-slate-200 pb-3">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                      <TruckTaj className="text-amber-600 w-4 h-3" />
+                      <TruckTaj className="text-orange-600 w-4 h-3" />
                       REQ-{req.id || (req._id ? String(req._id).slice(0, 8) : '')} <span className="font-normal text-sm text-slate-600">from {req.businessOwnerName}</span>
                     </h3>
                   </div>
                   <span className="text-xs text-slate-500 font-mono">
-                    {req.createdAt ? new Date(req.createdAt).toLocaleString() : '2026-06-10 08:45'}
+                    {req.createdAt ? new Date(req.createdAt).toLocaleString() : 'Recent'}
                   </span>
                 </div>
 
                 {/* Details split column layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-sm">
                   {/* Products */}
-                  <div className="bg-[#FAF7EE] border border-amber-200/80 p-4 rounded-2xl space-y-2">
+                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Consignment</p>
                     <div className="space-y-1.5 mt-2">
                       <p className="font-bold text-slate-900 text-sm">{req.title}</p>
-                      <p className="text-xs text-amber-800 font-bold font-mono">
-                        {req.chargeableWeight ? `${req.chargeableWeight} tons (Chargeable)` : `${req.weight} tons`}
+                      <p className="text-xs text-orange-700 font-bold font-mono">
+                        {req.chargeableWeight ? `${formatWeightTons(req.chargeableWeight)} (Chargeable)` : formatWeightTons(req.weight)}
                         {req.packagingType && <span className="ml-2 text-slate-600 font-sans">&bull; {req.packagingType}</span>}
                       </p>
                       {reqProducts.map((p, idx) => (
@@ -405,7 +470,7 @@ export default function TransporterDashboard() {
                         return (
                           <div className="flex flex-wrap gap-1 mt-2">
                             {flags.map((flag, fi) => (
-                              <span key={fi} className="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                              <span key={fi} className="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200">
                                 ⚠ {flag}
                               </span>
                             ))}
@@ -418,7 +483,7 @@ export default function TransporterDashboard() {
                         const reqTariff = calculateFreightTariff({
                           origin: req.origin,
                           destination: req.destination,
-                          chargeableTons: req.chargeableWeight || req.weight || 10,
+                          chargeableTons: parseFloat(req.chargeableWeight || req.weight) || 10,
                           vehicleType: 'Full Body Truck',
                           handlingFlags: req.specialHandling || []
                         });
@@ -445,18 +510,18 @@ export default function TransporterDashboard() {
                   </div>
 
                   {/* Pickup */}
-                  <div className="bg-[#FAF7EE] border border-amber-200/80 p-4 rounded-2xl space-y-2">
+                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Pickup Point</p>
                     <div className="space-y-1 mt-2 text-xs text-slate-700">
                       <p className="font-bold text-slate-900 text-sm">{req.origin}</p>
-                      <p><span className="text-slate-500">Address:</span> {reqPickup.address || 'Gulberg Industrial Area, Lahore'}</p>
-                      <p><span className="text-slate-500">Landmark:</span> {reqPickup.landmark || 'Near Main Chowk'}</p>
-                      <p><span className="text-slate-500">Contact:</span> {reqPickup.contactName || reqPickup.contact || 'Ahmed Raza'} ({reqPickup.phone || reqPickup.contactPhone || '0311-9988776'})</p>
+                      <p><span className="text-slate-500">Address:</span> {reqPickup.address || 'Not specified'}</p>
+                      <p><span className="text-slate-500">Landmark:</span> {reqPickup.landmark || '—'}</p>
+                      <p><span className="text-slate-500">Contact:</span> {reqPickup.contactName || reqPickup.contact || 'Shipper Contact'} {reqPickup.phone || reqPickup.contactPhone ? `(${reqPickup.phone || reqPickup.contactPhone})` : ''}</p>
                     </div>
                   </div>
 
                   {/* Recipients */}
-                  <div className="bg-[#FAF7EE] border border-amber-200/80 p-4 rounded-2xl space-y-2">
+                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Recipients</p>
                     <div className="space-y-1 mt-2 text-xs text-slate-700">
                       <p className="font-bold text-slate-900 text-sm">{req.destination}</p>
@@ -490,7 +555,7 @@ export default function TransporterDashboard() {
               );
             })}
             {pendingRequests.length === 0 && (
-              <div className="bg-white border-2 border-amber-200/90 rounded-3xl p-16 text-center text-slate-600 shadow-md">
+              <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center text-slate-600 shadow-xs">
                 <CheckCircle className="w-10 h-10 text-emerald-600 mx-auto mb-2 opacity-70" />
                 <p className="font-bold text-slate-800">No incoming shipping requests found.</p>
                 <p className="text-xs text-slate-500 mt-1">All incoming shipments are processed!</p>
@@ -514,12 +579,12 @@ export default function TransporterDashboard() {
 
               {/* View Switcher: Grid vs Live Fleet Radar */}
               <div className="flex items-center gap-2">
-                <div className="flex bg-[#FAF7EE] p-1 rounded-xl border border-amber-300 shadow-xs">
+                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
                   <button
                     onClick={() => setTrucksViewMode('grid')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                       trucksViewMode === 'grid'
-                        ? 'bg-gradient-to-r from-red-600 to-amber-500 text-white shadow-sm'
+                        ? 'bg-orange-600 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -530,11 +595,11 @@ export default function TransporterDashboard() {
                     onClick={() => setTrucksViewMode('radar')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                       trucksViewMode === 'radar'
-                        ? 'bg-gradient-to-r from-red-600 to-amber-500 text-white shadow-sm'
+                        ? 'bg-orange-600 text-white shadow-2xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    <Radio size={14} className={trucksViewMode === 'radar' ? 'animate-pulse text-cyan-300' : ''} />
+                    <Radio size={14} className={trucksViewMode === 'radar' ? 'text-white' : ''} />
                     <span>{isUrdu ? 'لائیو ریڈار نقشہ' : 'Live Fleet Radar'}</span>
                   </button>
                 </div>
@@ -543,15 +608,15 @@ export default function TransporterDashboard() {
             </div>
 
             {/* Quick Inter-City Freight Tariff Estimator Bar */}
-            <div className="glass-card border-2 border-amber-300/80 rounded-3xl p-4 shadow-lg text-left relative z-20">
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs text-left relative z-20">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2">
-                  <TruckTaj className="text-amber-600 w-4 h-3" />
-                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">
+                  <TruckTaj className="text-orange-600 w-4 h-3" />
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider font-mono">
                     ⚡ Live Inter-City Freight Tariff Estimator
                   </h4>
                 </div>
-                <span className="text-[10px] font-mono text-amber-900 font-bold bg-amber-100/90 px-2.5 py-0.5 rounded-full border border-amber-300 shadow-2xs">
+                <span className="text-[10px] font-mono text-slate-700 font-bold bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200 shadow-2xs">
                   Standard Rate: Rs. 45/Ton-km + 8% Fuel + 16% Tax
                 </span>
               </div>
@@ -599,10 +664,10 @@ export default function TransporterDashboard() {
                   });
                   const quickTotal = quickTariff.totalFare || quickTariff.totalFreight || 0;
                   return (
-                    <div className="bg-white/90 border-2 border-red-500 rounded-xl p-2 px-3 flex items-center justify-between shadow-xs">
+                    <div className="bg-orange-50/70 border border-orange-300 rounded-xl p-2 px-3 flex items-center justify-between shadow-xs">
                       <div>
                         <span className="text-[9px] font-bold text-slate-500 uppercase block font-mono">{quickTariff.distanceKm || 0} km</span>
-                        <span className="text-sm font-black text-red-700 font-mono">Rs. {quickTotal.toLocaleString()}</span>
+                        <span className="text-sm font-black text-orange-700 font-mono">Rs. {quickTotal.toLocaleString()}</span>
                       </div>
                       <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300">
                         Estimated
@@ -616,11 +681,11 @@ export default function TransporterDashboard() {
             {trucksViewMode === 'radar' ? (
               /* Live Fleet Radar Map View */
               <div className="space-y-4">
-                <div className="bg-slate-950/95 backdrop-blur-xl border-2 border-amber-400/80 rounded-3xl p-4 shadow-2xl overflow-hidden relative glass-card-3d">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm overflow-hidden relative">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3 px-2">
                     <div className="flex items-center gap-2">
-                      <Radio size={16} className="text-cyan-400 animate-pulse" />
-                      <span className="text-xs font-mono font-bold text-amber-300 uppercase tracking-wider">
+                      <Radio size={16} className="text-emerald-400" />
+                      <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">
                         {isUrdu ? 'ملک گیر بیڑے کا لائیو ریڈار' : 'Nationwide Fleet Radar Telemetry'}
                       </span>
                     </div>
@@ -643,12 +708,12 @@ export default function TransporterDashboard() {
                     <div 
                       key={truck._id || truck.id}
                       onClick={() => openAssignModalForTruck(truck)}
-                      className="glass-card-3d border border-amber-200/80 rounded-xl p-3 text-left hover:border-amber-400 transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between group"
+                      className="bg-white border border-slate-200 rounded-xl p-3 text-left hover:border-orange-400 transition-all cursor-pointer shadow-2xs hover:shadow-xs flex items-center justify-between group"
                     >
                       <div>
-                        <p className="font-mono font-bold text-xs text-slate-900 group-hover:text-red-700 transition-colors">{truck.plateNumber}</p>
+                        <p className="font-mono font-bold text-xs text-slate-900 group-hover:text-orange-700 transition-colors">{truck.plateNumber}</p>
                         <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                          <MapPin size={10} className="text-red-500 shrink-0" /> {truck.loc}
+                          <MapPin size={10} className="text-orange-500 shrink-0" /> {truck.loc}
                         </p>
                       </div>
                       <div className="text-right">
@@ -665,39 +730,39 @@ export default function TransporterDashboard() {
               /* Grid Cards View */
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {availableTrucks.map(truck => (
-                  <div key={truck._id} className="glass-card-3d border border-white/60 rounded-3xl p-5 text-left flex flex-col justify-between h-[290px] shadow-lg hover:border-amber-400 hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 relative overflow-hidden group">
+                  <div key={truck._id} className="bg-white border border-slate-200 rounded-2xl p-5 text-left flex flex-col justify-between h-[290px] shadow-xs hover:border-orange-300 hover:shadow-md transition-all duration-300 relative overflow-hidden group">
                     <div>
                       <div className="flex justify-between items-start">
-                        <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 text-amber-800 flex items-center justify-center group-hover:scale-105 transition-transform shadow-xs">
+                        <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 flex items-center justify-center group-hover:scale-105 transition-transform shadow-2xs">
                           <Truck size={20} />
                         </div>
-                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-black tracking-wider uppercase px-2.5 py-0.5 rounded-md font-mono shadow-2xs">
+                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-md font-mono shadow-2xs">
                           Available
                         </span>
                       </div>
 
-                      <h4 className="text-xl font-black text-slate-900 mt-4 font-mono">{truck.plateNumber}</h4>
-                      <p className="text-xs text-amber-800 font-semibold mt-1">{truck.truckType} &middot; {truck.capacity}</p>
+                      <h4 className="text-xl font-bold text-slate-900 mt-4 font-mono">{truck.plateNumber}</h4>
+                      <p className="text-xs text-orange-700 font-semibold mt-1">{truck.truckType} &middot; {truck.capacity}</p>
 
                       <div className="mt-4 space-y-1 text-xs text-slate-700">
                         <p><span className="text-slate-500">Owner:</span> <span className="text-slate-900 font-bold">{truck.ownerName}</span></p>
                         <p><span className="text-slate-500">Driver:</span> <span className="text-slate-900 font-bold">{truck.driverName}</span> <span className="text-slate-500 font-mono">({truck.driverMobile})</span></p>
                         <p className="flex items-center gap-1 mt-2 text-slate-600 font-medium">
-                          <MapPin size={12} className="text-red-600" /> {truck.loc}
+                          <MapPin size={12} className="text-slate-500" /> {truck.loc}
                         </p>
                       </div>
                     </div>
 
                     <button 
                       onClick={() => openAssignModalForTruck(truck)}
-                      className="w-full btn-primary font-bold py-2.5 rounded-xl text-xs transition-all cursor-pointer mt-4 shadow-md"
+                      className="w-full btn-primary font-bold py-2.5 rounded-xl text-xs transition-all cursor-pointer mt-4 shadow-xs"
                     >
                       {isUrdu ? 'گاڑی مقرر کریں' : 'Assign to Shipment'}
                     </button>
                   </div>
                 ))}
                 {availableTrucks.length === 0 && (
-                  <div className="col-span-3 bg-white border-2 border-amber-200/90 rounded-3xl text-center py-16 text-slate-600 shadow-md">
+                  <div className="col-span-3 bg-white border border-slate-200 rounded-2xl text-center py-16 text-slate-600 shadow-xs">
                     No available trucks found. Register or clear trips to free vehicles.
                   </div>
                 )}
@@ -715,7 +780,7 @@ export default function TransporterDashboard() {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[480px]">
               {/* Left pane listings */}
-              <div className="lg:col-span-4 bg-white border-2 border-amber-200/90 rounded-3xl p-4 overflow-y-auto max-h-[500px] space-y-3 shadow-md">
+              <div className="lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-4 overflow-y-auto max-h-[500px] space-y-3 shadow-xs">
                 {bookings
                   .filter(b => b.status !== 'Completed' && b.status !== 'Rejected')
                   .map(b => {
@@ -724,22 +789,22 @@ export default function TransporterDashboard() {
                       <div
                         key={b._id}
                         onClick={() => setSelectedBooking(b)}
-                        className={`p-4 rounded-2xl border transition-all cursor-pointer text-left relative overflow-hidden ${
+                        className={`p-4 rounded-xl border transition-all cursor-pointer text-left relative overflow-hidden ${
                           isSelected 
-                            ? 'bg-amber-50 border-2 border-red-600 shadow-md' 
-                            : 'bg-[#FAF7EE] border-amber-200 hover:border-amber-400'
+                            ? 'bg-orange-50/50 border-2 border-orange-600 shadow-sm' 
+                            : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
                         }`}
                       >
                         {isSelected && (
-                          <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-gradient-to-b from-red-600 to-amber-500" />
+                          <div className="absolute top-0 left-0 bottom-0 w-1 bg-[#F89020]" />
                         )}
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-mono text-xs text-red-700 font-bold">BLT-{b.cargoId || (b._id ? String(b._id).slice(0, 8) : '')}</h4>
-                            <h4 className="font-bold text-slate-900 text-base mt-1 truncate">{b.cargoTitle}</h4>
-                            <p className="text-xs text-slate-600 mt-1 font-mono">Truck: {b.truckPlate}</p>
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="min-w-0 flex-1 pr-1">
+                            <h4 className="font-mono text-xs text-orange-700 font-bold">BLT-{b.cargoId || (b._id ? String(b._id).slice(0, 8) : '')}</h4>
+                            <h4 className="font-bold text-slate-900 text-sm mt-0.5 truncate" title={b.cargoTitle}>{b.cargoTitle}</h4>
+                            <p className="text-xs text-slate-500 mt-1 font-mono">Truck: {b.truckPlate}</p>
                           </div>
-                          <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider ${getStatusBadgeStyle(b.status)}`}>
+                          <span className={`shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${getStatusBadgeStyle(b.status)}`}>
                             {b.status}
                           </span>
                         </div>
@@ -755,44 +820,44 @@ export default function TransporterDashboard() {
               <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-12 gap-6">
                 
                 {/* Details card */}
-                <div className="md:col-span-7 bg-white border-2 border-amber-200/90 rounded-3xl p-6 flex flex-col justify-between text-left shadow-md">
+                <div className="md:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 flex flex-col justify-between text-left shadow-xs">
                   {selectedBooking ? (
                     <div className="space-y-6 flex-1 flex flex-col justify-between">
                       <div>
-                        <div className="flex justify-between items-start border-b border-amber-200 pb-4">
-                          <div>
-                            <h3 className="text-lg font-black text-slate-900">{selectedBooking.cargoTitle}</h3>
-                            <p className="text-xs text-slate-600 mt-1">
+                        <div className="flex justify-between items-start border-b border-slate-200 pb-4 gap-2">
+                          <div className="min-w-0 flex-1 pr-2">
+                            <h3 className="text-lg font-bold text-slate-900 break-words">{selectedBooking.cargoTitle}</h3>
+                            <p className="text-xs text-slate-500 mt-1">
                               Owner ID: USR-{selectedBooking.truckOwnerId} &middot; Plate: <span className="font-mono font-bold text-slate-900">{selectedBooking.truckPlate}</span>
                             </p>
                           </div>
-                          <span className="text-xs font-mono font-bold text-red-700 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200">
+                          <span className="shrink-0 text-xs font-mono font-bold text-orange-700 bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200 whitespace-nowrap">
                             BLT-{selectedBooking.cargoId || (selectedBooking._id ? String(selectedBooking._id).slice(0, 8) : '')}
                           </span>
                         </div>
 
                         {/* Specifications */}
-                        <div className="grid grid-cols-2 gap-4 mt-6 text-xs text-slate-700">
-                          <div className="bg-[#FAF7EE] p-3 rounded-2xl border border-amber-200/80">
-                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Route</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-5 sm:mt-6 text-xs text-slate-700">
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Route</p>
                             <p className="font-bold text-slate-900 mt-0.5">
                               {selectedBooking.cargo?.origin || 'Lahore'} &rarr; {selectedBooking.cargo?.destination || 'Karachi'}
                             </p>
                           </div>
-                          <div className="bg-[#FAF7EE] p-3 rounded-2xl border border-amber-200/80">
-                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Agreed Price</p>
-                            <p className="font-bold text-emerald-700 mt-0.5 font-mono">Rs. {selectedBooking.price}</p>
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Agreed Price</p>
+                            <p className="font-bold text-emerald-700 mt-0.5 font-mono">{formatFreightPrice(selectedBooking.price)}</p>
                           </div>
                           {selectedBooking.cargo?.weight && (
-                            <div className="bg-[#FAF7EE] p-3 rounded-2xl border border-amber-200/80">
-                              <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Weight</p>
-                              <p className="font-bold text-slate-900 mt-0.5 font-mono">{selectedBooking.cargo?.weight} tons</p>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Weight</p>
+                              <p className="font-bold text-slate-900 mt-0.5 font-mono">{formatWeightTons(selectedBooking.cargo?.weight)}</p>
                             </div>
                           )}
                           {selectedBooking.eta && (
-                            <div className="bg-[#FAF7EE] p-3 rounded-2xl border border-amber-200/80">
-                              <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider">ETA</p>
-                              <p className="font-bold text-amber-800 mt-0.5 font-mono">{selectedBooking.eta}</p>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">ETA</p>
+                              <p className="font-bold text-slate-800 mt-0.5 font-mono">{selectedBooking.eta}</p>
                             </div>
                           )}
                         </div>
@@ -803,9 +868,9 @@ export default function TransporterDashboard() {
                             ? selectedBooking.cargo.pickupDetails
                             : safeJsonParse(selectedBooking.cargo?.pickupDetails, {});
                           return (
-                            <div className="mt-6 border-t border-amber-200 pt-4 space-y-2">
-                              <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Pickup Address</p>
-                              <div className="bg-[#FAF7EE] border border-amber-200/80 p-3 rounded-2xl text-xs text-slate-700">
+                            <div className="mt-6 border-t border-slate-200 pt-4 space-y-2">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pickup Address</p>
+                              <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs text-slate-700">
                                 <p><span className="text-slate-500 font-medium">Point:</span> {pickup.address || 'Corporate depot'}</p>
                                 <p className="mt-1"><span className="text-slate-500 font-medium">Contact:</span> {pickup.contactName || pickup.contact || '-'} ({pickup.phone || pickup.contactPhone || '-'})</p>
                               </div>
@@ -817,24 +882,24 @@ export default function TransporterDashboard() {
                       {/* PDF download */}
                       <button 
                         onClick={() => handleBiltyClick(selectedBooking)}
-                        className="w-full btn-primary font-bold py-3 rounded-xl text-sm transition-all cursor-pointer mt-8 flex justify-center items-center gap-2 shadow-md"
+                        className="w-full btn-primary font-bold py-3 rounded-xl text-sm transition-all cursor-pointer mt-8 flex justify-center items-center gap-2 shadow-sm"
                       >
                         <FileText size={16} /> {isUrdu ? 'بلٹی دیکھیں' : 'View & Print Digital Bilty'}
                       </button>
                     </div>
                   ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-3 py-16">
-                      <Package size={36} className="text-slate-400" />
-                      <p className="text-sm font-bold font-sans">Select a shipment to view details</p>
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-3 py-16">
+                      <Package size={36} className="text-slate-300" />
+                      <p className="text-sm font-semibold font-sans">Select a shipment to view details</p>
                     </div>
                   )}
                 </div>
 
                 {/* Chat pane */}
-                <div className="md:col-span-5 bg-white border-2 border-amber-200/90 rounded-3xl p-4 flex flex-col justify-between h-[400px] md:h-full shadow-md">
+                <div className="md:col-span-5 bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between h-[400px] md:h-full shadow-xs">
                   {selectedBooking ? (
                     <div className="flex flex-col justify-between h-full text-left">
-                      <div className="border-b border-amber-200 pb-2 mb-3 flex justify-between items-center">
+                      <div className="border-b border-slate-200 pb-2 mb-3 flex justify-between items-center">
                         <div>
                           <h4 className="text-sm font-bold text-slate-900">Fleet Radio / Chat</h4>
                           <p className="text-[10px] text-slate-500 font-mono mt-0.5">Plate: {selectedBooking.truckPlate}</p>
@@ -848,44 +913,44 @@ export default function TransporterDashboard() {
                           const isTransporter = m.sender === userData?.name;
                           return (
                             <div key={idx} className={`flex ${isTransporter ? 'justify-end' : 'justify-start'}`}>
-                              <div className={`p-2.5 rounded-2xl max-w-[85%] text-xs text-left shadow-sm ${
+                              <div className={`p-2.5 rounded-2xl max-w-[85%] text-xs text-left shadow-2xs ${
                                 isTransporter 
-                                  ? 'bg-gradient-to-r from-red-700 to-amber-700 text-white rounded-tr-none' 
-                                  : 'bg-[#FAF7EE] text-slate-900 border border-amber-200 rounded-tl-none'
+                                  ? 'bg-orange-600 text-white rounded-tr-none' 
+                                  : 'bg-slate-100 text-slate-900 border border-slate-200 rounded-tl-none'
                               }`}>
-                                <p className={`text-[9px] font-bold mb-0.5 ${isTransporter ? 'text-amber-200' : 'text-slate-500'}`}>{m.sender}</p>
+                                <p className={`text-[9px] font-bold mb-0.5 ${isTransporter ? 'text-orange-100' : 'text-slate-500'}`}>{m.sender}</p>
                                 <p className="leading-relaxed">{m.text}</p>
                               </div>
                             </div>
                           );
                         })}
                         {(selectedBooking.messages || []).length === 0 && (
-                          <div className="flex-1 flex items-center justify-center text-[10px] text-slate-500 italic">No messages exchanged. Type below to text the driver.</div>
+                          <div className="flex-1 flex items-center justify-center text-[10px] text-slate-400 italic">No messages exchanged. Type below to text the driver.</div>
                         )}
                         <div ref={chatEndRef} />
                       </div>
 
                       {/* Chat text input submit */}
-                      <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-amber-200 pt-3">
+                      <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-slate-200 pt-3">
                         <input 
                           type="text" 
                           value={chatMessageText}
                           onChange={e => setChatMessageText(e.target.value)}
                           placeholder="Type dispatch message..."
-                          className="flex-1 bg-[#FAF7EE] border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-none focus:bg-white focus:border-amber-500"
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-none focus:bg-white focus:border-orange-500"
                         />
                         <button 
                           type="submit"
-                          className="btn-primary p-2.5 rounded-xl cursor-pointer flex items-center justify-center shadow-sm"
+                          className="btn-primary p-2.5 rounded-xl cursor-pointer flex items-center justify-center shadow-xs"
                         >
                           <Send size={14} />
                         </button>
                       </form>
                     </div>
                   ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-2">
-                      <MessageSquare size={28} className="text-slate-400" />
-                      <p className="text-xs font-bold">Select a shipment to open chat</p>
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-2">
+                      <MessageSquare size={28} className="text-slate-300" />
+                      <p className="text-xs font-semibold">Select a shipment to open chat</p>
                     </div>
                   )}
                 </div>
@@ -898,10 +963,10 @@ export default function TransporterDashboard() {
         {/* HISTORY TAB */}
         {activeTab === 'history' && (
           <div className="space-y-6">
-            <div className="bg-white border-2 border-amber-200/90 rounded-3xl p-6 text-left shadow-md">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 text-left shadow-xs">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xs font-bold text-slate-700 tracking-wider uppercase">Delivery History</h3>
-                <span className="text-xs font-mono font-bold text-red-700 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200">
+                <span className="text-xs font-mono font-bold text-orange-700 bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">
                   Completed Trips: {bookings.filter(b => b.status === 'Completed').length}
                 </span>
               </div>
@@ -909,7 +974,7 @@ export default function TransporterDashboard() {
               <div className="overflow-x-auto touch-scroll">
                 <table className="w-full min-w-[640px] text-left text-sm">
                   <thead>
-                    <tr className="text-[10px] font-bold text-slate-700 uppercase tracking-wider border-b border-amber-200 bg-amber-50/70">
+                    <tr className="text-[10px] font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200 bg-slate-50">
                       <th className="p-3">Shipment ID</th>
                       <th className="p-3">Bilty No.</th>
                       <th className="p-3">Business Owner</th>
@@ -923,26 +988,26 @@ export default function TransporterDashboard() {
                     {bookings
                       .filter(b => b.status === 'Completed')
                       .map((b, idx) => (
-                        <tr key={b._id || idx} className="border-b border-slate-100 hover:bg-amber-50/40 transition-colors">
+                        <tr key={b._id || idx} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                           <td className="p-3 font-mono text-slate-600">SHP-{b.cargoId || 10400 + idx}</td>
                           <td className="p-3">
                             <button 
                               onClick={() => handleBiltyClick(b)}
-                              className="font-mono font-bold text-red-700 hover:underline cursor-pointer"
+                              className="font-mono font-bold text-orange-700 hover:underline cursor-pointer"
                             >
                               BLT-{b.cargoId || 88000 + idx}
                             </button>
                           </td>
-                          <td className="p-3 font-bold text-slate-900">{b.cargo?.businessOwnerName || 'Unknown Owner'}</td>
+                          <td className="p-3 font-bold text-slate-900">{b.cargo?.businessOwnerName || 'Shipper'}</td>
                           <td className="p-3 text-slate-700">
-                            {b.cargo?.origin || 'Lahore'} &rarr; {b.cargo?.destination || 'Karachi'}
+                            {b.cargo?.origin || b.origin || '—'} &rarr; {b.cargo?.destination || b.destination || '—'}
                           </td>
-                          <td className="p-3 text-slate-800 font-mono font-bold">{b.cargo?.weight || '12.5'} tons</td>
+                          <td className="p-3 text-slate-800 font-mono font-bold">{b.cargo?.weight ? formatWeightTons(b.cargo.weight) : '—'}</td>
                           <td className="p-3 text-slate-500 font-mono text-xs">
-                            {b.completedAt ? b.completedAt.split('T')[0] : '2026-06-10'}
+                            {b.completedAt ? b.completedAt.split('T')[0] : '—'}
                           </td>
                           <td className="p-3">
-                            <span className="bg-purple-50 text-purple-700 border border-purple-300 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider">
+                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider">
                               DELIVERED
                             </span>
                           </td>
@@ -966,27 +1031,34 @@ export default function TransporterDashboard() {
 
       {/* Rejection popup form */}
       {rejectingCargoId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md px-4">
-          <div className="bg-white/95 backdrop-blur-2xl w-full max-w-md relative p-6 rounded-3xl border-2 border-red-400/90 shadow-2xl overflow-hidden modal-enter">
-            <ChamakRibbon height="h-[5px]" />
-            <button onClick={() => { setRejectingCargoId(null); setRejectionReason(''); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 cursor-pointer">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/78 px-2.5 sm:px-4 py-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setRejectingCargoId(null);
+              setRejectionReason('');
+            }
+          }}
+        >
+          <div className="bg-white w-full max-w-md max-h-[calc(100dvh-1.5rem)] overflow-y-auto relative p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xl modal-enter">
+            <button type="button" aria-label="Close modal" onClick={() => { setRejectingCargoId(null); setRejectionReason(''); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 cursor-pointer">
               <X size={20} />
             </button>
-            <h2 className="text-2xl font-black text-slate-900 mb-2 mt-2 text-left">Reject Shipment Request</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-2 mt-1 text-left">Reject Shipment Request</h2>
             <p className="text-xs text-slate-600 mb-6 text-left">Please provide a mandatory reason for rejecting this corporate shipment request.</p>
             <form onSubmit={handleConfirmRejection} className="space-y-4 text-left">
               <div>
-                <label className="block text-xs font-bold text-red-700 uppercase tracking-wider mb-1">Rejection Reason *</label>
+                <label className="block text-xs font-bold text-rose-700 uppercase tracking-wider mb-1">Rejection Reason *</label>
                 <textarea 
                   required 
                   value={rejectionReason} 
                   onChange={e => setRejectionReason(e.target.value)} 
-                  className="w-full bg-[#FAF7EE]/90 border border-slate-300 rounded-2xl px-3.5 py-2.5 text-slate-900 h-24 text-sm outline-none focus:bg-white focus:border-red-500" 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 h-24 text-sm outline-none focus:bg-white focus:border-rose-500" 
                   placeholder="e.g. Schedule conflict or route unavailable. We cannot dispatch vehicles to this route next week." 
                 />
               </div>
-              <button type="submit" className="w-full btn-crimson text-white font-bold py-3 rounded-xl text-sm transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99]">
-                {isUrdu ? 'مسترد کریں' : 'Confirm Rejection'}
+              <button type="submit" disabled={isSubmittingAction} className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-sm transition-all cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed">
+                {isSubmittingAction ? 'Submitting...' : (isUrdu ? 'مسترد کریں' : 'Confirm Rejection')}
               </button>
             </form>
           </div>
@@ -995,36 +1067,39 @@ export default function TransporterDashboard() {
 
       {/* Assign Truck popup form with Dynamic Fare Calculation */}
       {showAssignModal && selectedTruckForAssign && (() => {
+        const acceptedCargoList = cargoRequests.filter(c => c.status === 'Accepted');
         const activeTariff = calculateFreightTariff({
           origin: assignOrigin || 'Lahore',
           destination: assignDestination || 'Karachi',
-          chargeableTons: parseFloat(assignWeight) || 10,
-          vehicleType: assignVehicleType || selectedTruckForAssign?.truckType || 'Full Body Truck',
+          chargeableTons: Math.max(0.5, convertToTons(assignWeight, assignWeightUnit) || 1),
+          vehicleType: assignVehicleType || selectedTruckForAssign?.truckType || '18-Wheeler Trailer',
           handlingFlags: selectedCargoForAssign?.specialHandling || []
         });
 
         return (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md px-4">
-            <div className="bg-white/95 backdrop-blur-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto relative p-6 rounded-3xl border-2 border-amber-400/90 shadow-2xl modal-enter">
-              <ChamakRibbon height="h-[5px]" />
-              <button onClick={() => setShowAssignModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 cursor-pointer">
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/78 px-2.5 sm:px-4 py-4"
+            onClick={(e) => e.target === e.currentTarget && setShowAssignModal(false)}
+          >
+            <div className="bg-white w-full max-w-lg max-h-[calc(100dvh-1.5rem)] overflow-y-auto relative p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xl modal-enter">
+              <button type="button" aria-label="Close modal" onClick={() => setShowAssignModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 cursor-pointer">
                 <X size={20} />
               </button>
-              <div className="flex items-center gap-2 mb-1 mt-2 text-left">
-                <TruckTaj className="text-amber-600 w-4 h-3" />
-                <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Fleet Dispatch &amp; Tariff Engine</span>
+              <div className="flex items-center gap-2 mb-1 mt-1 text-left">
+                <TruckTaj className="text-orange-600 w-4 h-3" />
+                <span className="text-[10px] font-bold text-orange-700 uppercase tracking-wider">Fleet Dispatch &amp; Tariff Engine</span>
               </div>
-              <h2 className="text-2xl font-black text-slate-900 mb-1 text-left">Assign Truck &amp; Calculate Fare</h2>
+              <h2 className="text-xl font-bold text-slate-900 mb-1 text-left">Assign Truck &amp; Calculate Fare</h2>
               <p className="text-xs text-slate-600 mb-4 text-left">
-                Select route and consignment details to view automated government/NHA freight tariff for vehicle <span className="text-red-700 font-bold font-mono">{selectedTruckForAssign.plateNumber}</span>.
+                Select route and consignment details to view automated government/NHA freight tariff for vehicle <span className="text-orange-700 font-bold font-mono">{selectedTruckForAssign.plateNumber}</span>.
               </p>
 
               {/* Truck summary badge */}
-              <div className="bg-[#FAF7EE] border border-amber-200/90 rounded-2xl p-3 mb-4 text-left flex items-center justify-between">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4 text-left flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-slate-900 text-sm">{selectedTruckForAssign.plateNumber}</span>
-                    <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded border border-amber-300 font-mono">
+                    <span className="text-[10px] font-bold bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-200 font-mono">
                       {selectedTruckForAssign.truckType}
                     </span>
                   </div>
@@ -1056,26 +1131,33 @@ export default function TransporterDashboard() {
                         });
                       }
                     }}
-                    className={`w-full bg-[#FAF7EE] border rounded-xl px-3.5 py-2.5 text-slate-900 text-xs outline-none transition-colors font-medium cursor-pointer ${
-                      assignFormErrors.cargo ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300 focus:bg-white focus:border-amber-500'
+                    className={`w-full bg-slate-50 border rounded-xl px-3.5 py-2.5 text-slate-900 text-xs outline-none transition-colors font-medium cursor-pointer ${
+                      assignFormErrors.cargo ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-200 focus:bg-white focus:border-orange-500'
                     }`}
                   >
-                    <option value="">-- Select Consignment Request --</option>
-                    {cargoRequests
-                      .filter(c => c.status === 'Accepted')
-                      .map(c => (
+                    <option value="">
+                      {acceptedCargoList.length === 0
+                        ? '-- No accepted cargo available yet --'
+                        : '-- Select Consignment Request --'}
+                    </option>
+                    {acceptedCargoList.map(c => (
                         <option key={c._id} value={String(c._id)}>
                           REQ-{c._id}: {c.title} ({c.weight} tons) &bull; {c.origin} &rarr; {c.destination}
                         </option>
                       ))}
                   </select>
+                  {acceptedCargoList.length === 0 && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mt-1.5 font-medium">
+                      Accept a shipment in the Shipment Requests tab first before assigning a truck.
+                    </p>
+                  )}
                   {assignFormErrors.cargo && (
                     <p className="text-[10px] text-red-600 mt-1 font-medium">{assignFormErrors.cargo}</p>
                   )}
                 </div>
 
                 {/* Route Details: From, To, Weight, Vehicle Type */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <SearchSelect
                       label="From (Origin City)"
@@ -1101,7 +1183,7 @@ export default function TransporterDashboard() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <UnitInput
                       label="Consignment Weight"
@@ -1123,20 +1205,20 @@ export default function TransporterDashboard() {
                     <select
                       value={assignVehicleType}
                       onChange={e => setAssignVehicleType(e.target.value)}
-                      className="w-full bg-[#FAF7EE] border border-slate-300 rounded-xl px-3 py-2 text-slate-900 text-xs outline-none focus:bg-white focus:border-amber-500 cursor-pointer font-medium"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 text-xs outline-none focus:bg-white focus:border-orange-500 cursor-pointer font-medium"
                     >
                       {VEHICLE_TYPES.map(vt => (
-                        <option key={vt.id} value={vt.name}>{vt.name} ({vt.capacityTons}t max)</option>
+                        <option key={vt.id} value={vt.id}>{vt.label} ({vt.defaultCapacity}t max)</option>
                       ))}
                     </select>
                   </div>
                 </div>
 
                 {/* Live Dynamic Calculated Fare Card */}
-                <div className="bg-gradient-to-br from-amber-50 to-orange-50/50 border-2 border-amber-300 rounded-2xl p-4 shadow-sm">
-                  <div className="flex items-center justify-between pb-2 border-b border-amber-200">
-                    <span className="text-[11px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <TruckTaj className="w-3.5 h-3 text-amber-600" />
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-2xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                    <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <TruckTaj className="w-3.5 h-3 text-orange-600" />
                       Dynamic Tariff Breakdown
                     </span>
                     <span className="text-xs font-mono font-bold text-slate-600">
@@ -1167,10 +1249,10 @@ export default function TransporterDashboard() {
                     </div>
                   </div>
 
-                  <div className="mt-3 pt-2.5 border-t border-amber-200 flex items-center justify-between">
+                  <div className="mt-3 pt-2.5 border-t border-slate-200 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-black uppercase text-amber-900 tracking-wider">Calculated Fare:</span>
-                      <p className="text-xl font-black text-red-700 font-mono">Rs. {(activeTariff.totalFare || activeTariff.totalFreight || 0).toLocaleString()}</p>
+                      <span className="text-[10px] font-bold uppercase text-slate-700 tracking-wider">Calculated Fare:</span>
+                      <p className="text-xl font-bold text-orange-700 font-mono">Rs. {(activeTariff.totalFare || activeTariff.totalFreight || 0).toLocaleString()}</p>
                     </div>
                     <button
                       type="button"
@@ -1184,7 +1266,7 @@ export default function TransporterDashboard() {
                           });
                         }
                       }}
-                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-900 font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                      className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1"
                     >
                       ⚡ Apply Fare
                     </button>
@@ -1210,8 +1292,8 @@ export default function TransporterDashboard() {
                       }
                     }}
                     placeholder="e.g. 75000"
-                    className={`w-full bg-[#FAF7EE] border rounded-xl px-3.5 py-2.5 text-slate-900 text-sm font-bold outline-none font-mono transition-colors ${
-                      assignFormErrors.price ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300 focus:bg-white focus:border-amber-500'
+                    className={`w-full bg-slate-50 border rounded-xl px-3.5 py-2.5 text-slate-900 text-sm font-bold outline-none font-mono transition-colors ${
+                      assignFormErrors.price ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-200 focus:bg-white focus:border-orange-500'
                     }`}
                   />
                   {assignFormErrors.price ? (
@@ -1225,9 +1307,11 @@ export default function TransporterDashboard() {
 
                 <button 
                   type="submit" 
-                  className="w-full btn-primary text-white font-bold py-3 rounded-xl text-sm transition-all cursor-pointer mt-4 shadow-md"
+                  disabled={isSubmittingAction || acceptedCargoList.length === 0}
+                  className="w-full btn-primary text-white font-bold py-3 rounded-xl text-sm transition-all cursor-pointer mt-4 shadow-xs disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {isUrdu ? 'گاڑی مقرر کریں' : 'Confirm Dispatch & Assignment'}
+                  {isSubmittingAction && <Loader2 size={15} className="animate-spin" />}
+                  <span>{isSubmittingAction ? 'Dispatching...' : (isUrdu ? 'گاڑی مقرر کریں' : 'Confirm Dispatch & Assignment')}</span>
                 </button>
               </form>
             </div>

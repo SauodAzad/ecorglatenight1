@@ -9,7 +9,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[80vh]">
-        <Loader2 className="animate-spin text-[#00F5D4]" size={48} />
+        <Loader2 className="animate-spin text-orange-600" size={48} />
       </div>
     );
   }

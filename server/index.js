@@ -6,6 +6,7 @@ const fs = require('fs');
 const multer = require('multer');
 require('dotenv').config();
 
+const { Op } = require('sequelize');
 const sequelize = require('./db');
 const User = require('./models/User');
 const { Truck, Cargo, Booking, BookingMessage, Notification, Complaint } = require('./models/Logistics');
@@ -23,6 +24,87 @@ const {
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
+
+// Lightweight health check endpoint for mobile IP verification
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', serverTime: new Date().toISOString() });
+});
+
+// Public sanitized fleet & network overview (no PII) for interactive landing explorer
+app.get('/api/public/overview', async (req, res) => {
+  try {
+    const [
+      totalTrucks,
+      availableTrucks,
+      inTransitTrucks,
+      totalBilties,
+      completedDeliveries,
+      trucks,
+      cargos
+    ] = await Promise.all([
+      Truck.count(),
+      Truck.count({ where: { status: 'Available' } }),
+      Truck.count({ where: { status: 'In Transit' } }),
+      Cargo.count({ where: { status: { [Op.in]: ['Truck Assigned', 'Loaded', 'In Transit', 'Delivered', 'Completed'] } } }),
+      Cargo.count({ where: { status: { [Op.in]: ['Delivered', 'Completed'] } } }),
+      Truck.findAll({
+        attributes: ['id', 'plateNumber', 'capacity', 'loc', 'status', 'truckType', 'fitnessDoc', 'insuranceDoc'],
+        order: [['status', 'ASC'], ['id', 'DESC']],
+        limit: 24
+      }),
+      Cargo.findAll({
+        where: { status: { [Op.in]: ['Truck Assigned', 'Loaded', 'In Transit', 'Delivered', 'Completed'] } },
+        attributes: ['id', 'title', 'origin', 'destination', 'weight', 'status', 'assignedTruck', 'createdAt'],
+        order: [['createdAt', 'DESC']],
+        limit: 8
+      })
+    ]);
+
+    const cities = new Set();
+    const fleetVehicles = trucks.map((t) => {
+      if (t.loc) cities.add(t.loc);
+      return {
+        id: t.id,
+        plateNumber: t.plateNumber,
+        truckType: t.truckType || 'Commercial Carrier',
+        capacity: t.capacity,
+        loc: t.loc,
+        status: t.status,
+        verified: Boolean(t.fitnessDoc && t.insuranceDoc),
+      };
+    });
+
+    const recentDispatches = cargos.map((c) => {
+      if (c.origin) cities.add(c.origin);
+      if (c.destination) cities.add(c.destination);
+      return {
+        id: c.id,
+        biltyNo: `BLT-${c.id}`,
+        title: c.title,
+        origin: c.origin,
+        destination: c.destination,
+        weight: c.weight,
+        status: c.status,
+        assignedTruck: c.assignedTruck || null,
+      };
+    });
+
+    res.json({
+      stats: {
+        totalTrucks,
+        availableTrucks,
+        inTransitTrucks,
+        totalBilties,
+        completedDeliveries,
+        activeHubs: cities.size,
+      },
+      fleetVehicles,
+      recentDispatches,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
 // ─── File Upload Setup ─────────────────────────────────────────────────────────
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -125,7 +207,7 @@ app.patch('/api/auth/me', authMiddleware, async (req, res) => {
 
 app.post('/api/upload', authMiddleware, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  const fileUrl = `http://192.168.18.93:${process.env.PORT || 5000}/uploads/${req.file.filename}`;
+  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
   res.json({ url: fileUrl, filename: req.file.filename, originalname: req.file.originalname });
 });
 
@@ -233,17 +315,28 @@ app.post('/api/trucks', authMiddleware, async (req, res) => {
 app.patch('/api/trucks/:id', authMiddleware, async (req, res) => {
   try {
     const updateData = { ...req.body };
+    delete updateData.id;
+    delete updateData._id;
     if (req.body.coordinates) {
       updateData.lat = req.body.coordinates[0];
       updateData.lng = req.body.coordinates[1];
       delete updateData.coordinates;
     }
-    if (req.body.id) {
+    if (req.body.plateNumber !== undefined) {
+      updateData.plateNumber = req.body.plateNumber;
+    } else if (
+      typeof req.body.id === 'string' &&
+      req.body.id.trim() !== '' &&
+      req.body.id !== String(req.params.id) &&
+      !/^\d+$/.test(req.body.id.trim())
+    ) {
       updateData.plateNumber = req.body.id;
-      delete updateData.id;
     }
     await Truck.update(updateData, { where: { id: req.params.id } });
     const truck = await Truck.findByPk(req.params.id);
+    if (!truck) {
+      return res.status(404).json({ message: 'Truck not found' });
+    }
     res.json({ ...truck.toJSON(), _id: truck.id, coordinates: [truck.lat, truck.lng] });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -399,7 +492,17 @@ app.delete('/api/cargo/:id', authMiddleware, async (req, res) => {
 
 // ─── Booking Routes ────────────────────────────────────────────────────────────
 
-const { Op } = require('sequelize');
+const bookingIncludes = [
+  { model: BookingMessage, as: 'messages' },
+  {
+    model: Cargo,
+    as: 'cargo',
+    include: [
+      { model: User, as: 'transporter', attributes: ['name', 'phone'] },
+      { model: User, as: 'businessOwner', attributes: ['name', 'phone', 'businessName'] }
+    ]
+  }
+];
 
 app.get('/api/bookings', authMiddleware, async (req, res) => {
   try {
@@ -410,10 +513,8 @@ app.get('/api/bookings', authMiddleware, async (req, res) => {
 
     const bookings = await Booking.findAll({
       where,
-      include: [
-        { model: BookingMessage, as: 'messages' },
-        { model: Cargo, as: 'cargo' }
-      ]
+      include: bookingIncludes,
+      order: [['createdAt', 'DESC']]
     });
     res.json(bookings.map(b => {
       const plain = b.toJSON();
@@ -460,14 +561,20 @@ app.patch('/api/bookings/:id', authMiddleware, async (req, res) => {
       const msg = req.body.$push.messages;
       await BookingMessage.create({ bookingId: req.params.id, sender: msg.sender, text: msg.text });
       const booking = await Booking.findByPk(req.params.id, {
-        include: [{ model: BookingMessage, as: 'messages' }]
+        include: bookingIncludes
       });
-      return res.json({ ...booking.toJSON(), _id: booking.id });
+      const plainMsg = booking.toJSON();
+      io.emit('booking_updated');
+      return res.json({
+        ...plainMsg,
+        _id: booking.id,
+        cargo: plainMsg.cargo ? formatCargo(plainMsg.cargo) : null
+      });
     }
 
     await Booking.update(req.body, { where: { id: req.params.id } });
     const booking = await Booking.findByPk(req.params.id, {
-      include: [{ model: BookingMessage, as: 'messages' }, { model: Cargo, as: 'cargo' }]
+      include: bookingIncludes
     });
 
     // When transit starts: update cargo status and notify business owner
@@ -544,7 +651,12 @@ app.patch('/api/bookings/:id', authMiddleware, async (req, res) => {
       });
     }).catch(e => console.error('WhatsApp notifyBookingStatusUpdate error:', e.message));
 
-    res.json({ ...booking.toJSON(), _id: booking.id });
+    const plainBooking = booking.toJSON();
+    res.json({
+      ...plainBooking,
+      _id: booking.id,
+      cargo: plainBooking.cargo ? formatCargo(plainBooking.cargo) : null
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -571,7 +683,12 @@ app.post('/api/bookings/:id/complete', authMiddleware, async (req, res) => {
       discrepancyNotes: discrepancyNotes || null
     }, { where: { id: req.params.id } });
     await Truck.update({ status: 'Available' }, { where: { id: booking.truckId } });
-    await Cargo.update({ status: 'Completed' }, { where: { id: booking.cargoId } });
+    if (booking.cargoId) {
+      await Cargo.update(
+        { status: 'Completed', assignedTruck: booking.truckPlate },
+        { where: { id: booking.cargoId } }
+      );
+    }
     await sendNotification(booking.transporterId, `Delivery completed for ${booking.cargoTitle}.`);
 
     io.emit('booking_updated');
@@ -755,14 +872,14 @@ app.get('/api/admin/stats', authMiddleware, async (req, res) => {
     // Truck utilization calculations
     const utilizationRate = trucksCount > 0 ? Math.round((activeTrucksCount / trucksCount) * 100) : 0;
 
-    // Monthly stats for Shipments & Bilties (Jan-Jun 2026 or current year)
-    const currentYear = new Date().getFullYear();
+    // Monthly stats for Shipments & Bilties (rolling last 6 months ending in current month)
+    const now = new Date();
     const monthlyStats = [];
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    for (let i = 0; i < 6; i++) {
-      const start = new Date(currentYear, i, 1);
-      const end = new Date(currentYear, i + 1, 1);
+    for (let offset = 5; offset >= 0; offset--) {
+      const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1);
 
       const realShipments = await Cargo.count({
         where: {
@@ -782,7 +899,7 @@ app.get('/api/admin/stats', authMiddleware, async (req, res) => {
       });
 
       monthlyStats.push({
-        month: monthNames[i],
+        month: monthNames[start.getMonth()],
         shipments: realShipments,
         bilties: realBilties
       });
@@ -813,21 +930,39 @@ app.get('/api/admin/stats', authMiddleware, async (req, res) => {
 app.get('/api/admin/shipments', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access denied' });
   try {
-    const cargo = await Cargo.findAll({
-      include: [
-        { model: User, as: 'transporter', attributes: ['name'] },
-        { model: User, as: 'businessOwner', attributes: ['name'] }
-      ],
-      order: [['createdAt', 'DESC']]
+    const [cargo, allBookings] = await Promise.all([
+      Cargo.findAll({
+        include: [
+          { model: User, as: 'transporter', attributes: ['name', 'phone'] },
+          { model: User, as: 'businessOwner', attributes: ['name', 'phone', 'businessName'] }
+        ],
+        order: [['createdAt', 'DESC']]
+      }),
+      Booking.findAll({ order: [['createdAt', 'DESC']] })
+    ]);
+
+    const bookingByCargoId = new Map();
+    allBookings.forEach(b => {
+      if (b.cargoId && !bookingByCargoId.has(b.cargoId)) {
+        bookingByCargoId.set(b.cargoId, b.toJSON());
+      }
     });
 
     const result = cargo.map(c => {
-      const plain = c.toJSON();
+      const formatted = formatCargo(c);
+      const booking = bookingByCargoId.get(c.id);
+      const hasBilty = Boolean(
+        booking ||
+        formatted.assignedTruck ||
+        ['Truck Assigned', 'Loaded', 'In Transit', 'Delivered', 'Completed'].includes(formatted.status)
+      );
       return {
-        ...plain,
-        _id: c.id,
-        transporterName: plain.transporter ? plain.transporter.name : 'Unassigned',
-        businessOwnerName: plain.businessOwner ? plain.businessOwner.name : 'Unknown'
+        ...formatted,
+        truckPlate: booking?.truckPlate || formatted.assignedTruck || null,
+        biltyNo: hasBilty ? `BLT-${c.id}` : '-',
+        price: booking?.price || (formatted.totalFare ? String(Math.round(formatted.totalFare)) : null),
+        completedAt: booking?.completedAt || null,
+        receiverSignature: booking?.receiverSignature || null
       };
     });
     res.json(result);

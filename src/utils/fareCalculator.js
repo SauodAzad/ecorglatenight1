@@ -225,3 +225,25 @@ export const calculateFreightTariff = ({
     }
   };
 };
+
+export const stripCurrencyPrefix = (val) => {
+  if (val === null || val === undefined) return '';
+  return String(val).replace(/^\s*(PKR|Rs\.?)\s*/i, '').trim();
+};
+
+export const formatFreightPrice = (val, fallback = 'Agreed / N/A') => {
+  const cleaned = stripCurrencyPrefix(val);
+  if (!cleaned) return fallback;
+  return `Rs. ${cleaned}`;
+};
+
+export const stripWeightUnit = (val) => {
+  if (val === null || val === undefined) return '';
+  return String(val).replace(/\s*(metric\s*)?tons?$/i, '').trim();
+};
+
+export const formatWeightTons = (val, unitLabel = 'tons', fallback = '—') => {
+  const cleaned = stripWeightUnit(val);
+  if (!cleaned) return fallback;
+  return `${cleaned} ${unitLabel}`;
+};

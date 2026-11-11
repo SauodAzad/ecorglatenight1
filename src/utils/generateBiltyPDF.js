@@ -1,14 +1,32 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
+import { formatFreightPrice, stripCurrencyPrefix, stripWeightUnit } from './fareCalculator';
 
 /**
- * Generates the Bilty PDF and returns a Blob URL string.
- * The caller is responsible for revoking the URL when done (URL.revokeObjectURL).
- * @param {object} biltyData
- * @returns {Promise<string>} blobUrl
+ * Safely fetches the web app logo as a base64 DataURL for jsPDF embedding.
  */
-export const generateBiltyPDFBlob = async (biltyData) => {
+const loadLogoDataUrl = async () => {
+  if (typeof fetch === 'undefined' || typeof FileReader === 'undefined') return null;
+  try {
+    const res = await fetch('/logo.jpg?v=2');
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Internal helper that builds and returns the populated jsPDF document.
+ */
+const buildBiltyPDFDoc = async (biltyData) => {
   const doc = new jsPDF('p', 'pt', 'a4');
   const idStr = String(biltyData._id || biltyData.id || '00000000');
   const dateVal = biltyData.completedAt || biltyData.createdAt || new Date();
@@ -26,50 +44,64 @@ export const generateBiltyPDFBlob = async (biltyData) => {
     truckPlate: biltyData.truckPlate || 'Unassigned',
     origin: biltyData.origin || 'N/A',
     destination: biltyData.destination || 'N/A',
-    weight: `${biltyData.weight || '0'} tons`,
-    freight: `PKR ${biltyData.price || '0'}`,
+    weight: `${stripWeightUnit(biltyData.weight) || '0'} tons`,
+    freight: `PKR ${stripCurrencyPrefix(biltyData.price) || '0'}`,
     terms: biltyData.paymentTerms || 'Prepaid',
     verifiedAt: new Date(dateVal).toISOString()
   });
 
-  let qrDataUrl = null;
-  try {
-    qrDataUrl = await QRCode.toDataURL(qrPayload, {
+  const [qrDataUrl, logoDataUrl] = await Promise.all([
+    QRCode.toDataURL(qrPayload, {
       errorCorrectionLevel: 'M',
       margin: 1,
       width: 200,
       color: { dark: '#0B101D', light: '#FFFFFF' }
-    });
-  } catch (err) {
-    console.error('QR code generation error:', err);
-  }
+    }).catch((err) => {
+      console.error('QR code generation error:', err);
+      return null;
+    }),
+    loadLogoDataUrl()
+  ]);
 
-  // Outer Border (Sindhi Crimson)
+  // Outer Border (Charcoal Graphite)
   doc.setLineWidth(1.5);
-  doc.setDrawColor(185, 28, 28);
+  doc.setDrawColor(51, 65, 85);
   doc.rect(marginX, marginY, pageWidth - marginX * 2, pageHeight - marginY * 2);
 
-  // Header Background (Sindhi Crimson Red)
-  doc.setFillColor(185, 28, 28);
+  // Header Background (Deep Charcoal matching Logo Truck)
+  doc.setFillColor(30, 41, 59);
   doc.rect(marginX, marginY, pageWidth - marginX * 2, 75, 'F');
 
-  // Decorative Golden Saffron Stripe
-  doc.setFillColor(245, 158, 11);
+  // Decorative Logistics Orange Stripe (exact Logo Chevron #F89020)
+  doc.setFillColor(248, 144, 32);
   doc.rect(marginX, marginY + 75, pageWidth - marginX * 2, 5, 'F');
+
+  // Embed Brand Logo card on Header Top-Left (exact 4:3 aspect)
+  let headerTextX = marginX + 18;
+  if (logoDataUrl) {
+    try {
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(marginX + 12, marginY + 11.5, 68, 52, 4, 4, 'F');
+      doc.addImage(logoDataUrl, 'JPEG', marginX + 14, marginY + 13.5, 64, 48);
+      headerTextX = marginX + 92;
+    } catch {
+      headerTextX = marginX + 18;
+    }
+  }
 
   // Header Text
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(26);
+  doc.setFontSize(24);
   doc.setTextColor(255, 255, 255);
-  doc.text('E-CARGO-BILTY', marginX + 18, marginY + 32);
+  doc.text('E-CARGO-BILTY', headerTextX, marginY + 32);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(254, 243, 199);
-  doc.text('Official Digital Lorry Receipt (Bilty) • National Freight Network of Pakistan', marginX + 18, marginY + 48);
+  doc.setFontSize(9.5);
+  doc.setTextColor(254, 215, 170);
+  doc.text('Official Digital Lorry Receipt (Bilty) • National Freight Network of Pakistan', headerTextX, marginY + 48);
   doc.setFontSize(8.5);
-  doc.setTextColor(255, 255, 255);
-  doc.text('Ministry of Communications Compliant • 100% Cryptographically Verified Consignment', marginX + 18, marginY + 62);
+  doc.setTextColor(226, 232, 240);
+  doc.text('Ministry of Communications Compliant • Verified Consignment Record', headerTextX, marginY + 62);
 
   // Embed High-Res Scannable QR Code in Header Top-Right
   if (qrDataUrl) {
@@ -81,7 +113,7 @@ export const generateBiltyPDFBlob = async (biltyData) => {
 
   // Border below header
   doc.setLineWidth(1);
-  doc.setDrawColor(185, 28, 28);
+  doc.setDrawColor(234, 88, 12);
   doc.line(marginX, marginY + 80, pageWidth - marginX, marginY + 80);
 
   // Bilty Details Section
@@ -152,7 +184,7 @@ export const generateBiltyPDFBlob = async (biltyData) => {
   const isPrepaid = paymentTerms.toLowerCase().includes('prepaid');
   const isNet30 = paymentTerms.toLowerCase().includes('net-30') || paymentTerms.toLowerCase().includes('corp');
   
-  const stampBg = isPrepaid ? [16, 185, 129] : isNet30 ? [59, 130, 246] : [225, 29, 72];
+  const stampBg = isPrepaid ? [16, 185, 129] : isNet30 ? [51, 65, 85] : [234, 88, 12];
   doc.setFillColor(stampBg[0], stampBg[1], stampBg[2]);
   doc.roundedRect(rightColX, currentYRight - 11, 140, 18, 3, 3, 'F');
   doc.setFont('helvetica', 'bold');
@@ -172,7 +204,7 @@ export const generateBiltyPDFBlob = async (biltyData) => {
     currentY += 14;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    doc.setTextColor(185, 28, 28);
+    doc.setTextColor(234, 88, 12);
     doc.text('SPECIAL CARGO HANDLING INSTRUCTIONS:', marginX + 20, currentY);
     
     currentY += 8;
@@ -205,13 +237,14 @@ export const generateBiltyPDFBlob = async (biltyData) => {
 
   // AutoTable for Cargo Particulars & Packaging
   const packaging = biltyData.packagingType || 'Cartons / Boxes';
-  const chargeableWt = biltyData.chargeableWeight || biltyData.weight || '12.5';
+  const chargeableWt = stripWeightUnit(biltyData.chargeableWeight || biltyData.weight) || 'N/A';
+  const formattedFreight = formatFreightPrice(biltyData.price);
   
   autoTable(doc, {
     startY: currentY,
     margin: { left: marginX + 10, right: marginX + 10 },
     theme: 'grid',
-    headStyles: { fillColor: [185, 28, 28], textColor: [255, 255, 255], fontStyle: 'bold' },
+    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
     styles: { fontSize: 9, cellPadding: 6 },
     head: [['Description of Goods', 'Packaging', 'Chargeable Weight', 'Freight Rate / Total']],
     body: [
@@ -219,7 +252,7 @@ export const generateBiltyPDFBlob = async (biltyData) => {
         biltyData.cargoTitle || 'General Commercial Cargo',
         packaging,
         `${chargeableWt} Metric Tons`,
-        `Rs. ${biltyData.price || '50,000'}`
+        formattedFreight
       ]
     ],
   });
@@ -230,8 +263,8 @@ export const generateBiltyPDFBlob = async (biltyData) => {
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
   doc.text('Total Agreed Freight:', pageWidth - marginX - 210, currentY);
-  doc.setTextColor(185, 28, 28);
-  doc.text(`Rs. ${biltyData.price || '50,000'}`, pageWidth - marginX - 70, currentY, { align: 'right' });
+  doc.setTextColor(234, 88, 12);
+  doc.text(formattedFreight, pageWidth - marginX - 70, currentY, { align: 'right' });
 
   // Delivery Notes if present
   if (biltyData.deliveryNotes) {
@@ -239,11 +272,16 @@ export const generateBiltyPDFBlob = async (biltyData) => {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(8.5);
     doc.setTextColor(80, 80, 80);
-    doc.text(`Consignee Gate Notes: "${biltyData.deliveryNotes}"`, marginX + 20, currentY);
+    const wrappedNotes = doc.splitTextToSize(
+      `Consignee Gate Notes: "${biltyData.deliveryNotes}"`,
+      pageWidth - (marginX + 20) * 2
+    );
+    doc.text(wrappedNotes, marginX + 20, currentY);
+    currentY += Math.max(0, wrappedNotes.length - 1) * 11;
   }
 
   // Terms and Conditions
-  currentY += 25;
+  currentY += 22;
   doc.setLineWidth(0.5);
   doc.setDrawColor(200, 200, 200);
   doc.line(marginX, currentY, pageWidth - marginX, currentY);
@@ -263,8 +301,8 @@ export const generateBiltyPDFBlob = async (biltyData) => {
   currentY += 11;
   doc.text('3. This e-Bilty serves as a verified legal carrier manifest under Pakistani Carriage of Goods by Road Act & Sales Tax Rules.', marginX + 20, currentY);
 
-  // Signatures Section with Touchscreen e-POD embedding
-  currentY += 55;
+  // Signatures Section with Touchscreen e-POD embedding (clamped safely inside page border)
+  currentY = Math.min(currentY + 55, pageHeight - marginY - 26);
   doc.setLineWidth(0.5);
   doc.setDrawColor(0, 0, 0);
   doc.line(marginX + 20, currentY, marginX + 180, currentY);
@@ -295,32 +333,38 @@ export const generateBiltyPDFBlob = async (biltyData) => {
 
   // Light watermark text
   doc.setFontSize(50);
-  doc.setTextColor(230, 240, 245);
+  doc.setTextColor(241, 245, 249);
   doc.setFont('helvetica', 'bold');
   doc.text('VERIFIED E-BILTY', pageWidth / 2, pageHeight / 2 + 50, { align: 'center', angle: -30 });
 
+  return doc;
+};
+
+/**
+ * Generates the Bilty PDF and returns a Blob URL string.
+ * The caller is responsible for revoking the URL when done (URL.revokeObjectURL).
+ * @param {object} biltyData
+ * @returns {Promise<string>} blobUrl
+ */
+export const generateBiltyPDFBlob = async (biltyData) => {
+  const doc = await buildBiltyPDFDoc(biltyData);
   return doc.output('bloburl');
 };
 
 /**
- * Directly triggers a browser download of the Bilty PDF.
+ * Directly triggers a browser/device download of the Bilty PDF.
  * @param {object} biltyData
+ * @returns {Promise<{ok: boolean, filename?: string, error?: string}>}
  */
 export const generateBiltyPDF = async (biltyData) => {
   try {
-    const blobUrl = await generateBiltyPDFBlob(biltyData);
+    const doc = await buildBiltyPDFDoc(biltyData);
     const idStr = String(biltyData._id || biltyData.id || '000000');
-    const filename = `Bilty_${idStr.slice(0, 6).toUpperCase()}.pdf`;
-
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    const filename = `Bilty_${idStr.slice(0, 8).toUpperCase()}.pdf`;
+    doc.save(filename);
+    return { ok: true, filename };
   } catch (err) {
     console.error('PDF generation failed:', err);
-    alert('Failed to generate PDF: ' + err.message);
+    return { ok: false, error: err.message };
   }
 };

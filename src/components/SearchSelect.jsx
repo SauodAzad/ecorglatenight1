@@ -138,22 +138,38 @@ export default function SearchSelect({
     setSearchQuery('');
   };
 
-  const isInvalid = Boolean(touched && error);
+  const isInvalid = touched !== undefined ? Boolean(touched && error) : Boolean(error);
 
   return (
     <div ref={wrapperRef} className={`space-y-1 text-left relative ${isOpen ? 'z-30' : 'z-10'} ${className}`}>
       {label && (
         <label className={`block text-[11px] font-extrabold uppercase tracking-wider ${
-          isInvalid ? 'text-rose-600' : 'text-slate-700'
+          isInvalid ? 'text-rose-400' : 'text-slate-200'
         } ${isUrdu ? 'font-urdu text-xs' : ''}`}>
           {label}
-          {required && <span className="text-rose-500 ml-1 font-black">*</span>}
+          {required && <span className="text-rose-400 ml-1 font-black">*</span>}
         </label>
       )}
 
       {/* Main Trigger Box */}
       <div 
         ref={triggerBoxRef}
+        role="combobox"
+        tabIndex={0}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-invalid={isInvalid}
+        aria-label={label || placeholder}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            setIsOpen(true);
+            updatePosition();
+            setTimeout(() => inputRef.current?.focus(), 50);
+          } else if (e.key === 'Escape') {
+            setIsOpen(false);
+          }
+        }}
         onClick={() => {
           const nextState = !isOpen;
           setIsOpen(nextState);
@@ -162,30 +178,30 @@ export default function SearchSelect({
             setTimeout(() => inputRef.current?.focus(), 50);
           }
         }}
-        className={`w-full rounded-xl py-2 px-3 flex items-center justify-between gap-2 text-xs sm:text-sm font-medium transition-all cursor-pointer select-none ${
+        className={`w-full rounded-xl py-2 px-3 flex items-center justify-between gap-2 text-xs sm:text-sm font-medium transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
           isInvalid
-            ? 'bg-rose-50/70 border-2 border-rose-500 text-rose-950 shadow-xs'
+            ? 'bg-rose-500/15 border-2 border-rose-500/80 text-rose-100 shadow-xs'
             : isOpen
-              ? 'bg-white border-2 border-cyan-500 ring-2 ring-cyan-400/20 shadow-xs'
-              : 'bg-white/90 border border-slate-300 text-slate-900 hover:border-slate-400 shadow-2xs'
+              ? 'bg-[#0F1930] border-2 border-orange-500 ring-2 ring-orange-500/25 shadow-xs'
+              : 'bg-[#0F1930]/80 border border-white/15 text-white hover:border-white/30 shadow-2xs'
         }`}
       >
         <div className="flex items-center gap-2 truncate flex-1">
-          {LeadingIcon && <LeadingIcon size={16} className={isInvalid ? 'text-rose-500' : 'text-slate-400'} />}
+          {LeadingIcon && <LeadingIcon size={16} className={isInvalid ? 'text-rose-400' : 'text-slate-400'} />}
           {selectedOption ? (
             <div className="flex items-center gap-2 truncate">
               {selectedOption.icon && <span className="text-sm shrink-0">{selectedOption.icon}</span>}
-              <span className="font-bold text-slate-900 truncate">
+              <span className="font-bold text-white truncate">
                 {selectedOption.label || selectedOption.name}
               </span>
               {(selectedOption.subtext || selectedOption.province) && (
-                <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+                <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
                   ({selectedOption.subtext || selectedOption.province})
                 </span>
               )}
             </div>
           ) : value ? (
-            <span className="font-bold text-slate-900 truncate">{value}</span>
+            <span className="font-bold text-white truncate">{value}</span>
           ) : (
             <span className="text-slate-400 truncate">{placeholder}</span>
           )}
@@ -196,12 +212,13 @@ export default function SearchSelect({
             <button 
               type="button"
               onClick={handleClear}
-              className="p-1 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              aria-label="Clear selection"
+              className="p-1 hover:bg-white/15 rounded-full text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               <X size={14} />
             </button>
           )}
-          <ChevronDown size={16} className={`text-slate-500 transition-transform ${isOpen ? 'rotate-180 text-cyan-600' : ''}`} />
+          <ChevronDown size={16} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180 text-orange-400' : ''}`} />
         </div>
       </div>
 
@@ -219,8 +236,8 @@ export default function SearchSelect({
               }}
               className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
                 value === pill
-                  ? 'bg-cyan-100 border-cyan-400 text-cyan-900'
-                  : 'bg-slate-100/80 hover:bg-slate-200 border-slate-300 text-slate-700'
+                  ? 'bg-orange-500/20 border-orange-400/50 text-orange-200'
+                  : 'bg-white/[0.06] hover:bg-white/15 border-white/15 text-slate-300'
               }`}
             >
               {pill}
@@ -234,26 +251,26 @@ export default function SearchSelect({
         <div 
           ref={dropdownRef}
           style={dropdownStyle}
-          className="bg-white/98 backdrop-blur-2xl border-2 border-cyan-400/90 rounded-2xl shadow-[0_25px_60px_-15px_rgba(2,132,199,0.35),0_15px_30px_rgba(15,23,42,0.22)] overflow-hidden animate-dropdown-fade flex flex-col pointer-events-auto"
+          className="bg-[#0B1325]/98 border border-white/15 rounded-xl shadow-[0_20px_52px_rgba(0,0,0,0.85)] overflow-hidden animate-dropdown-fade flex flex-col pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Search Input Box */}
-          <div className="p-2.5 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2 shrink-0">
-            <Search size={14} className="text-cyan-600 shrink-0 ml-1" />
+          <div className="p-2.5 border-b border-white/10 bg-[#0F1930]/90 flex items-center gap-2 shrink-0">
+            <Search size={14} className="text-orange-400 shrink-0 ml-1" />
             <input
               ref={inputRef}
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Type to filter..."
-              className="w-full bg-transparent text-xs py-1 text-slate-800 placeholder-slate-400 outline-none font-medium"
+              className="w-full bg-transparent border-0 text-xs py-1 text-white placeholder-slate-400 outline-none font-medium"
               onClick={e => e.stopPropagation()}
             />
             {searchQuery && (
               <button 
                 type="button" 
                 onClick={() => setSearchQuery('')}
-                className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                className="text-slate-400 hover:text-white p-0.5 cursor-pointer"
               >
                 <X size={12} />
               </button>
@@ -261,7 +278,7 @@ export default function SearchSelect({
           </div>
 
           {/* Options List */}
-          <div className="overflow-y-auto max-h-52 divide-y divide-slate-100/80 p-1.5 custom-scrollbar">
+          <div className="overflow-y-auto max-h-52 divide-y divide-white/[0.06] p-1.5 custom-scrollbar">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((opt, i) => {
                 const optVal = opt.value || opt.id || opt.name || opt.label;
@@ -273,16 +290,16 @@ export default function SearchSelect({
                     onClick={() => handleSelect(opt)}
                     className={`px-3 py-2.5 rounded-xl text-xs flex items-center justify-between gap-2 cursor-pointer transition-colors ${
                       isSelected 
-                        ? 'bg-gradient-to-r from-cyan-50 to-purple-50 font-bold text-cyan-950 border border-cyan-300' 
-                        : 'hover:bg-sky-50/80 text-slate-700'
+                        ? 'bg-orange-500/20 font-bold text-orange-200 border border-orange-400/40' 
+                        : 'hover:bg-white/[0.07] text-slate-200'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 truncate">
                       {opt.icon && <span className="text-base shrink-0">{opt.icon}</span>}
                       <div className="truncate">
-                        <p className="font-semibold text-slate-900 leading-tight truncate">{opt.label || opt.name}</p>
+                        <p className="font-semibold text-white leading-tight truncate">{opt.label || opt.name}</p>
                         {(opt.subtext || opt.province || opt.hub) && (
-                          <p className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
+                          <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
                             {opt.province ? `${opt.province} • ` : ''}{opt.hub || opt.subtext}
                           </p>
                         )}
@@ -291,11 +308,11 @@ export default function SearchSelect({
 
                     <div className="flex items-center gap-2 shrink-0">
                       {opt.badge && (
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold">
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/[0.08] text-slate-200 border border-white/15 font-bold">
                           {opt.badge}
                         </span>
                       )}
-                      {isSelected && <Check size={15} className="text-cyan-600 font-bold" />}
+                      {isSelected && <Check size={15} className="text-orange-400 font-bold" />}
                     </div>
                   </div>
                 );
@@ -312,8 +329,8 @@ export default function SearchSelect({
 
       {/* Validation Error Message */}
       {isInvalid && (
-        <div className="flex items-center gap-1.5 text-rose-600 text-[11px] font-bold animate-fadeIn pl-0.5">
-          <AlertCircle size={13} className="shrink-0 text-rose-500" />
+        <div className="flex items-center gap-1.5 text-rose-400 text-[11px] font-bold animate-fadeIn pl-0.5">
+          <AlertCircle size={13} className="shrink-0 text-rose-400" />
           <span className={isUrdu ? 'font-urdu' : ''}>{error}</span>
         </div>
       )}
